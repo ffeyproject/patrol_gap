@@ -43,6 +43,8 @@ dependencies:
   # Watermark foto (nama, tanggal, lokasi, koordinat) & reverse-geocoding
   image: ^4.2.0
   geocoding: ^3.0.0
+  package_info_plus: ^9.0.1
+  ota_update: ^7.1.0
 
 dev_dependencies:
   flutter_test:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/models.dart';
+import '../services/update_service.dart';
 import 'beranda_screen.dart';
 import 'patroli_screen.dart';
 import 'insiden_screen.dart';
@@ -36,6 +37,13 @@ class _HomeShellState extends State<HomeShell> {
       TamuScreen(user: widget.user),
       ProfilScreen(user: widget.user),
     ];
+
+    // Otomatis periksa ketersediaan pembaruan dari server apk.produksionline.xyz
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        UpdateService.instance.checkForUpdate(context, silent: true);
+      }
+    });
   }
 
   void _onTabSelected(int index) {

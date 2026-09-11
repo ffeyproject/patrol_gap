@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/offline_service.dart';
 import '../services/session_service.dart';
+import '../services/update_service.dart';
 import '../widgets/common_widgets.dart';
 import 'login_screen.dart';
 import 'master_site_screen.dart';
@@ -26,6 +27,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
   AppUser? _user;
   int _pending = 0;
   bool _syncing = false;
+  String _appVersion = 'v1.0.0';
 
   @override
   void initState() {
@@ -33,6 +35,18 @@ class _ProfilScreenState extends State<ProfilScreen> {
     _user = widget.user;
     _loadProfileData();
     _loadPending();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await UpdateService.instance.getLocalPackageInfo();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${info.version}+${info.buildNumber}';
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadProfileData() async {
@@ -661,9 +675,24 @@ class _ProfilScreenState extends State<ProfilScreen> {
             const SizedBox(height: 10),
 
             _MenuTile(
+              icon: Icons.system_update_rounded,
+              title: 'Cek Pembaruan Versi Aplikasi',
+              subtitle: 'Versi aktif: $_appVersion (Server: apk.produksionline.xyz)',
+              iconColor: const Color(0xFF0284C7),
+              iconBg: const Color(0xFFE0F2FE),
+              trailing: const Icon(Icons.cloud_sync_rounded,
+                  color: Color(0xFF0284C7)),
+              onTap: () {
+                UpdateService.instance.checkForUpdate(context, silent: false);
+              },
+            ),
+
+            const SizedBox(height: 10),
+
+            _MenuTile(
               icon: Icons.info_outline_rounded,
               title: 'Tentang Aplikasi Patroli GAP',
-              subtitle: 'Patroli Security Mobile v1.0.0 (Sanctum REST API)',
+              subtitle: 'Patroli Security Mobile $_appVersion (Sanctum REST API)',
               iconColor: const Color(0xFF7C3AED),
               iconBg: const Color(0xFFEDE9FE),
               trailing: const Icon(Icons.chevron_right_rounded,
@@ -672,7 +701,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Patroli Security GAP',
-                  applicationVersion: 'v1.0.0 (Sanctum REST API)',
+                  applicationVersion: '$_appVersion (Sanctum REST API)',
                   applicationIcon: const AppLogo(size: 48, borderRadius: 12),
                   children: const [
                     SizedBox(height: 10),

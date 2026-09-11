@@ -1,0 +1,8 @@
+{
+  "version": "1.0.0",
+  "version_code": 1,
+  "apk_url": "https://apk.produksionline.xyz/Patroli_GAP_v1.0.0.apk",
+  "changelog": "• Rilis versi perdana aplikasi Patroli GAP Mobile\n• Fitur absensi wajah & validasi GPS\n• Patroli QR Checkpoint & laporan insiden real-time\n• Fitur auto in-app update dari server",
+  "force_update": false,
+  "file_size": "101.4 MB"
+}
