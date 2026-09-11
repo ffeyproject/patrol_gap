@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Patroli Security</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Leaflet (peta, tanpa API key) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+<!-- SheetJS (export ke Excel) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- qrcode.js (generate QR checkpoint untuk dicetak & ditempel Admin) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<style>
+:root {
+  --primary: #2F6FED;
+  --primary-dark: #1B3F91;
+  --primary-light: #1E2A4A;
+  --accent: #14B8A6;
+  --accent-dark: #0E7C70;
+  --success: #22C55E;
+  --success-bg: rgba(34,197,94,.12);
+  --warning: #F5A623;
+  --warning-bg: rgba(245,166,35,.12);
+  --danger: #EF4444;
+  --danger-bg: rgba(239,68,68,.12);
+  --bg: #10151D;
+  --surface: #1A212C;
+  --surface-alt: #212938;
+  --border: #2A3341;
+  --text-primary: #F3F5F8;
+  --text-secondary: #9AA4B2;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+}
+button, input, select { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+
+/* LOGIN */
+#loginScreen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(47,111,237,.25), transparent 32%),
+    radial-gradient(circle at 90% 90%, rgba(20,184,166,.16), transparent 30%),
+    linear-gradient(160deg, #0C1422, #10151D 60%, #0E1724);
+  padding: 20px;
+}
+.login-card {
+  width: 100%;
+  max-width: 410px;
+  background: rgba(26,33,44,.96);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 32px 28px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.42);
+}
+.login-icon {
+  width: 68px; height: 68px; margin: 0 auto 16px;
+  border-radius: 18px;
+  background: rgba(47,111,237,.14);
+  border: 1px solid rgba(47,111,237,.28);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+}
+.login-title { text-align:center; font-size:21px; font-weight:800; margin-bottom:5px; }
+.login-sub { text-align:center; font-size:12.5px; color:var(--text-secondary); margin-bottom:24px; }
+.field-label { display:block; font-size:12.5px; font-weight:600; margin:0 0 7px; color:var(--text-primary); }
+.field-input {
+  width:100%; padding:12px 14px; margin:0 0 14px;
+  border-radius:12px; border:1px solid var(--border);
+  background:var(--surface-alt); color:var(--text-primary);
+  font-size:13.5px; outline:none;
+}
+.field-input::placeholder { color:#687386; }
+.field-input:focus {
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(47,111,237,.12);
+}
+select.field-input { color:var(--text-primary); }
+select.field-input option { background:var(--surface); color:var(--text-primary); }
+.btn-primary-full {
+  width:100%; padding:13px 14px; border-radius:12px; border:0;
+  background:var(--primary); color:#fff; font-weight:700; font-size:13.5px;
+  cursor:pointer; transition:.15s ease;
+}
+.btn-primary-full:hover { background:#3D7AF0; transform:translateY(-1px); }
+.btn-primary-full:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+.login-error, .modal-error {
+  background:var(--danger-bg); color:#FF8C8C;
+  border:1px solid rgba(239,68,68,.2);
+  font-size:12px; padding:10px 12px; border-radius:10px; margin-bottom:14px; display:none;
+}
+.login-hint { text-align:center; font-size:11px; color:var(--text-secondary); margin-top:16px; }
+
+/* APP SHELL */
+#appShell { display:none; }
+.app-shell { display:flex; min-height:100vh; }
+.sidebar {
+  width:260px; flex-shrink:0; height:100vh; position:sticky; top:0; z-index:50;
+  display:flex; flex-direction:column; padding:22px 16px;
+  color:#fff;
+  background:linear-gradient(180deg,#172B57 0%,#14254A 45%,#101D38 100%);
+  border-right:1px solid rgba(255,255,255,.06);
+}
+.brand { display:flex; align-items:center; gap:12px; padding:4px 8px 22px; }
+.brand-icon {
+  width:44px; height:44px; border-radius:13px;
+  background:rgba(20,184,166,.16); border:1px solid rgba(20,184,166,.28);
+  display:flex; align-items:center; justify-content:center; font-size:21px;
+  overflow:hidden;
+}
+.brand-icon img { width:100%; height:100%; object-fit:cover; display:block; }
+.login-icon img { width:100%; height:100%; object-fit:cover; display:block; border-radius:inherit; }
+.brand-title { font-weight:800; font-size:15px; }
+.brand-sub { font-size:11.5px; color:rgba(255,255,255,.65); margin-top:2px; }
+.nav-menu { display:flex; flex-direction:column; gap:5px; flex:1; }
+.nav-item {
+  display:flex; align-items:center; gap:12px; width:100%;
+  padding:11px 14px; border-radius:11px; border:1px solid transparent;
+  background:transparent; color:rgba(255,255,255,.76);
+  font-size:13px; font-weight:500; cursor:pointer; text-align:left;
+  transition:.15s ease;
+}
+.nav-item:hover { background:rgba(255,255,255,.07); color:#fff; }
+.nav-item.active {
+  background:rgba(20,184,166,.14);
+  border-color:rgba(20,184,166,.18);
+  color:#fff; font-weight:700;
+}
+.nav-ico { font-size:16px; width:20px; text-align:center; }
+.sidebar-footer { padding-top:12px; display:flex; flex-direction:column; gap:8px; }
+.user-chip {
+  display:flex; align-items:center; gap:10px;
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.07);
+  padding:10px 12px; border-radius:11px;
+}
+.user-avatar {
+  width:34px; height:34px; border-radius:50%;
+  background:rgba(20,184,166,.22); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:13px; flex-shrink:0;
+}
+.user-name { font-size:12.5px; font-weight:700; line-height:1.3; }
+.user-role { font-size:10.5px; color:rgba(255,255,255,.62); }
+.btn-logout {
+  background:rgba(239,68,68,.10); border:1px solid rgba(239,68,68,.14);
+  color:#FFB0B0; font-size:11.5px; padding:9px; border-radius:10px; cursor:pointer;
+}
+.btn-logout:hover { background:rgba(239,68,68,.17); }
+.conn-status {
+  display:flex; align-items:center; gap:8px; font-size:11px;
+  color:rgba(255,255,255,.68); background:rgba(255,255,255,.06);
+  padding:8px 11px; border-radius:10px;
+}
+.dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.dot-ok { background:#4ADE80; box-shadow:0 0 0 3px rgba(74,222,128,.10); }
+.dot-warn { background:#FBBF24; }
+.dot-err { background:#F87171; }
+
+/* TOP BAR */
+.main { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--bg); }
+.topbar {
+  height:68px; background:rgba(26,33,44,.94); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 24px;
+  position:sticky; top:0; z-index:20; backdrop-filter:blur(12px);
+}
+.hamburger { display:none; background:none; border:0; color:var(--text-primary); font-size:21px; cursor:pointer; }
+.topbar-title { font-size:17px; font-weight:700; flex:1; }
+.topbar-actions { display:flex; align-items:center; gap:10px; }
+.today-badge {
+  font-size:11.5px; color:var(--text-secondary);
+  background:var(--surface-alt); border:1px solid var(--border);
+  padding:7px 12px; border-radius:20px;
+}
+.btn-refresh {
+  background:var(--primary); color:#fff; border:0;
+  padding:9px 15px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer;
+}
+.btn-refresh:hover { background:#3D7AF0; }
+
+/* CONTENT */
+.content { padding:24px; flex:1; }
+.page { display:none; }
+.page.active { display:block; animation:fadeIn .2s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:none} }
+
+.stat-grid {
+  display:grid; grid-template-columns:repeat(5,1fr);
+  gap:14px; margin-bottom:18px;
+}
+.stat-card {
+  min-width:0; background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:16px; display:flex; align-items:center; gap:13px;
+  box-shadow:var(--shadow);
+}
+.stat-ico {
+  width:44px; height:44px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+}
+.stat-blue { background:rgba(47,111,237,.13); }
+.stat-green { background:var(--success-bg); }
+.stat-red { background:var(--danger-bg); }
+.stat-amber { background:var(--warning-bg); }
+.stat-value { font-size:22px; font-weight:800; line-height:1.1; color:var(--text-primary); }
+.stat-label { font-size:11.5px; color:var(--text-secondary); margin-top:3px; }
+
+.grid-2 { display:grid; grid-template-columns:1.1fr 1fr; gap:16px; margin-bottom:16px; }
+.panel {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:20px; box-shadow:var(--shadow); margin-bottom:16px;
+}
+.panel.no-pad { padding:0; overflow:hidden; }
+.panel-header {
+  display:flex; align-items:baseline; justify-content:space-between;
+  margin-bottom:14px; flex-wrap:wrap; gap:8px;
+}
+.panel-header h3 { margin:0; font-size:15px; font-weight:700; color:var(--text-primary); }
+.panel-sub { font-size:11.5px; color:var(--text-secondary); }
+.panel-actions { display:flex; gap:8px; }
+.btn-export {
+  background:rgba(47,111,237,.12); color:#78A2FF;
+  border:1px solid rgba(47,111,237,.16); padding:8px 13px;
+  border-radius:10px; font-size:11.5px; font-weight:700; cursor:pointer;
+}
+.btn-export:hover { background:rgba(47,111,237,.19); }
+.btn-add {
+  background:var(--primary); color:#fff; border:0; padding:8px 14px;
+  border-radius:10px; font-size:11.5px; font-weight:700; cursor:pointer;
+}
+.btn-add:hover { background:#3D7AF0; }
+.row-actions { display:flex; gap:6px; }
+.btn-icon {
+  width:28px; height:28px; border-radius:8px; border:1px solid var(--border);
+  background:rgba(255,255,255,.03); color:var(--text-secondary);
+  font-size:12.5px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+}
+.btn-icon:hover { background:rgba(255,255,255,.08); color:var(--text-primary); }
+.btn-icon.danger { color:#FF8686; border-color:rgba(239,68,68,.28); }
+.btn-icon.danger:hover { background:var(--danger-bg); color:#FF8686; }
+
+.status-list { display:flex; flex-direction:column; gap:10px; }
+.status-item {
+  padding:12px 13px; border:1px solid var(--border);
+  border-radius:11px; background:rgba(33,41,56,.45);
+}
+.status-item-top { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+.status-item-title { font-size:13px; font-weight:600; color:var(--text-primary); }
+.status-item-frac { font-size:11.5px; color:var(--text-secondary); white-space:nowrap; }
+.progress-bar { height:7px; background:var(--surface-alt); border-radius:6px; overflow:hidden; }
+.progress-fill { height:100%; background:var(--primary); border-radius:6px; transition:width .3s ease; }
+
+.incident-list { display:flex; flex-direction:column; gap:9px; }
+.incident-row {
+  display:flex; gap:10px; padding:10px; border-radius:11px;
+  border:1px solid var(--border); background:rgba(33,41,56,.35);
+}
+.incident-badge {
+  width:34px; height:34px; border-radius:10px;
+  background:var(--danger-bg); color:var(--danger);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:16px;
+}
+.incident-title { font-size:12.8px; font-weight:700; }
+.incident-desc { font-size:11.5px; color:var(--text-secondary); margin-top:2px; }
+.incident-meta { font-size:10.5px; color:var(--text-secondary); margin-top:4px; }
+.incident-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+.incident-card {
+  border:1px solid var(--border); border-radius:12px; padding:14px;
+  background:rgba(33,41,56,.32);
+}
+.incident-card .pill { margin-bottom:8px; }
+
+.table-wrap { overflow-x:auto; border-radius:10px; }
+.data-table { width:100%; border-collapse:collapse; font-size:12px; color:var(--text-primary); }
+.data-table th {
+  text-align:left; padding:10px 12px; color:var(--text-secondary);
+  font-weight:600; border-bottom:1px solid var(--border);
+  white-space:nowrap; background:rgba(33,41,56,.35);
+}
+.data-table td { padding:11px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.data-table tbody tr:hover { background:rgba(47,111,237,.045); }
+.data-table .empty-row td { text-align:center; color:var(--text-secondary); padding:28px; }
+
+.pill {
+  display:inline-flex; align-items:center; gap:4px; padding:4px 9px;
+  border-radius:20px; font-size:10.8px; font-weight:700;
+}
+.pill-success { background:var(--success-bg); color:#4ADE80; }
+.pill-warning { background:var(--warning-bg); color:#F6B84A; }
+.pill-danger { background:var(--danger-bg); color:#FF7777; }
+.pill-neutral { background:var(--surface-alt); color:var(--text-secondary); }
+
+.map-box { height:560px; width:100%; background:var(--surface-alt); }
+.leaflet-container { background:#16202B; }
+.leaflet-control, .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background:var(--surface); color:var(--text-primary); border-color:var(--border);
+}
+.leaflet-popup-content { font-size:12px; }
+.leaflet-control-zoom a { color:var(--text-primary); background:var(--surface); border-color:var(--border); }
+.photo-link { color:#79A4FF; font-weight:600; text-decoration:none; }
+.photo-link:hover { text-decoration:underline; }
+
+.info-banner { background:rgba(47,111,237,.08); border-color:rgba(47,111,237,.18); }
+.info-banner-inner {
+  display:flex; gap:10px; align-items:flex-start; font-size:12px;
+  color:#AFC4F5; line-height:1.55;
+}
+
+/* MODALS */
+.modal-overlay {
+  display:none; position:fixed; inset:0; background:rgba(3,8,15,.72);
+  backdrop-filter:blur(5px); z-index:100; align-items:center; justify-content:center; padding:20px;
+}
+.modal-box {
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--text-primary); border-radius:18px; padding:24px;
+  width:100%; max-width:410px; max-height:90vh; overflow-y:auto;
+  box-shadow:0 24px 70px rgba(0,0,0,.42);
+}
+.modal-title { font-size:16px; font-weight:800; margin-bottom:4px; }
+.modal-sub { font-size:11.5px; color:var(--text-secondary); margin-bottom:18px; line-height:1.5; }
+.modal-actions { display:flex; gap:10px; margin-top:18px; }
+.btn-secondary {
+  flex:1; padding:11px; border-radius:10px;
+  border:1px solid var(--border); background:var(--surface-alt);
+  color:var(--text-primary); cursor:pointer; font-size:12px; font-weight:600;
+}
+.btn-secondary:hover { background:#283243; }
+.btn-locate {
+  background:rgba(20,184,166,.10); border:1px solid rgba(20,184,166,.18);
+  color:#5EE1D2; border-radius:9px; padding:8px 10px; font-size:11px;
+  cursor:pointer; font-weight:700; margin-bottom:12px;
+}
+
+/* RESPONSIVE */
+@media (max-width:1100px) {
+  .stat-grid { grid-template-columns:repeat(3,1fr); }
+  .grid-2 { grid-template-columns:1fr; }
+}
+@media (max-width:780px) {
+  .sidebar { position:fixed; transform:translateX(-100%); box-shadow:none; }
+  .sidebar.open { transform:translateX(0); box-shadow:20px 0 60px rgba(0,0,0,.45); }
+  .hamburger { display:block; }
+  .topbar { padding:0 16px; }
+  .today-badge { display:none; }
+  .content { padding:16px; }
+  .stat-grid { grid-template-columns:repeat(2,1fr); gap:10px; }
+  .stat-card { padding:13px; }
+}
+@media (max-width:480px) {
+  .login-card { padding:26px 20px; }
+  .stat-grid { grid-template-columns:1fr 1fr; }
+  .stat-value { font-size:20px; }
+  .stat-label { font-size:10.5px; }
+  .topbar-title { font-size:15px; }
+  .btn-refresh { padding:8px 11px; font-size:11px; }
+  .panel { padding:15px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= LOGIN SCREEN ======================= -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-icon"><img src="data:image/jpeg;base64,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" alt="Logo Patroli Security"></div>
+    <div class="login-title">Dashboard Patroli Security</div>
+    <div class="login-sub">Masuk dengan akun Super Admin / Danru / Supervisor</div>
+
+    <div class="login-error" id="loginError"></div>
+
+    <label class="field-label">Username</label>
+    <input class="field-input" id="loginUserId" placeholder="Contoh: sendhy" autocomplete="off">
+
+    <label class="field-label">PIN</label>
+    <input class="field-input" id="loginPin" type="password" placeholder="PIN akun">
+
+    <button class="btn-primary-full" id="loginBtn" onclick="handleLogin()">Masuk Dashboard</button>
+
+    <div class="login-hint">Akun Satpam tidak memiliki akses ke dashboard ini.</div>
+  </div>
+</div>
+
+<!-- ======================= APP SHELL ======================= -->
+<div id="appShell">
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-icon"><img src="data:image/jpeg;base64,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" alt="Logo"></div>
+      <div>
+        <div class="brand-title">Patroli Security</div>
+        <div class="brand-sub">Sistem Pemantauan &amp; Patroli</div>
+      </div>
+    </div>
+    <nav class="nav-menu">
+      <button class="nav-item active" data-page="overview"><span class="nav-ico">▦</span> Ringkasan</button>
+      <button class="nav-item" data-page="map"><span class="nav-ico">⌖</span> Peta Live</button>
+      <button class="nav-item" data-page="patrol"><span class="nav-ico">✓</span> Patroli</button>
+      <button class="nav-item" data-page="incidents"><span class="nav-ico">!</span> Insiden</button>
+      <button class="nav-item" data-page="guests"><span class="nav-ico">♟</span> Buku Tamu</button>
+      <button class="nav-item" data-page="sites"><span class="nav-ico">⌂</span> Site &amp; Checkpoint</button>
+      <button class="nav-item" data-page="users"><span class="nav-ico">●</span> Kelola User</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div>
+          <div class="user-name" id="userNameLabel">-</div>
+          <div class="user-role" id="userRoleLabel">-</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="handleLogout()">🚪 Keluar</button>
+      <div class="conn-status" id="connStatus"><span class="dot dot-warn"></span> Menghubungkan...</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburger">☰</button>
+      <div class="topbar-title" id="pageTitle">Ringkasan Operasional</div>
+      <div class="topbar-actions">
+        <span class="today-badge" id="todayBadge"></span>
+        <button class="btn-refresh" id="refreshBtn">⟳ Refresh</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- ===== OVERVIEW ===== -->
+      <section class="page active" id="page-overview">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-ico stat-blue">🧑</div><div><div class="stat-value" id="statUsers">–</div><div class="stat-label">Petugas Aktif</div></div></div>
+          <div class="stat-card"><div class="stat-ico stat-green">✅</div><div><div class="stat-value" id="statPatrol">–</div><div class="stat-label">Scan Patroli Hari Ini</div></div></div>
+          <div class="stat-card"><div class="stat-ico stat-red">⚠️</div><div><div class="stat-value" id="statIncidents">–</div><div class="stat-label">Insiden Hari Ini</div></div></div>
+          <div class="stat-card"><div class="stat-ico stat-amber">👥</div><div><div class="stat-value" id="statGuests">–</div><div class="stat-label">Tamu Aktif</div></div></div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-header"><h3>Status Patroli per Site</h3><span class="panel-sub">Progres hari ini</span></div>
+            <div id="patrolStatusList" class="status-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>Insiden Terbaru</h3><span class="panel-sub">5 laporan terakhir</span></div>
+            <div id="latestIncidents" class="incident-list"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>Status Patroli per Petugas</h3><span class="panel-sub">Progres checkpoint hari ini per Danru dan Satpam</span></div>
+          <div class="table-wrap">
+            <table class="data-table" id="patrolStatusUserTable"><thead><tr><th>Petugas</th><th>Role</th><th>Site</th><th>Progres</th><th>Status</th><th>Patroli Terakhir</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>Aktivitas Scan Patroli Terbaru</h3><span class="panel-sub">10 aktivitas terakhir (termasuk foto selfie petugas)</span></div>
+          <div class="table-wrap">
+            <table class="data-table" id="latestPatrolTable"><thead><tr><th>Waktu</th><th>Petugas</th><th>Checkpoint</th><th>Catatan</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MAP ===== -->
+      <section class="page" id="page-map">
+        <div class="panel no-pad">
+          <div class="panel-header" style="padding:20px 20px 0 20px;">
+            <h3>Peta Posisi Terakhir Petugas &amp; Checkpoint</h3>
+            <span class="panel-sub">Marker biru = checkpoint, marker hijau = scan patroli terakhir</span>
+          </div>
+          <div id="map" class="map-box"></div>
+        </div>
+      </section>
+
+      <!-- ===== PATROL ===== -->
+      <section class="page" id="page-patrol">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Riwayat Scan Patroli</h3>
+            <div class="panel-actions"><button class="btn-export" id="exportPatrolBtn">⬇ Export Excel</button></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="patrolTable"><thead><tr><th>Log ID</th><th>Waktu</th><th>Petugas</th><th>Checkpoint</th><th>Koordinat</th><th>Catatan</th><th>Foto Selfie</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== INCIDENTS ===== -->
+      <section class="page" id="page-incidents">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Semua Laporan Insiden</h3>
+            <div class="panel-actions"><button class="btn-export" id="exportIncidentBtn">⬇ Export Excel</button></div>
+          </div>
+          <div id="incidentGrid" class="incident-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== GUESTS ===== -->
+      <section class="page" id="page-guests">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Buku Tamu Digital</h3>
+            <div class="panel-actions"><button class="btn-export" id="exportGuestBtn">⬇ Export Excel</button></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="guestTable"><thead><tr><th>Nama Tamu</th><th>No. Identitas</th><th>Tujuan</th><th>Keperluan</th><th>Check-In</th><th>Check-Out</th><th>Status</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SITES & CHECKPOINTS ===== -->
+      <section class="page" id="page-sites">
+        <div class="panel info-banner">
+          <div class="info-banner-inner">
+            <span style="font-size:18px;">💡</span>
+            <div>
+              <b>Cara kerja QR Checkpoint:</b> tambahkan Site (lokasi/gedung) dan Checkpoint (titik
+              patroli di dalamnya) di sini. Setiap checkpoint otomatis dapat kode QR unik. Klik
+              <b>Cetak QR</b>, print, lalu tempel fisik di lokasi checkpoint tersebut. Saat Satpam
+              scan QR itu lewat aplikasi mobile, sistem mencatat kehadiran + foto selfie petugas +
+              GPS petugas di titik itu.
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Daftar Site</h3>
+              <button class="btn-add" onclick="openAddSiteModal()">+ Tambah Site</button>
+            </div>
+            <div id="sitesList" class="status-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Daftar Checkpoint</h3>
+              <button class="btn-add" onclick="openAddCheckpointModal()">+ Tambah Checkpoint</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="checkpointTable"><thead><tr><th>Site</th><th>Nama Checkpoint</th><th>Kode QR</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== USERS ===== -->
+      <section class="page" id="page-users">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Kelola User / Petugas</h3>
+            <button class="btn-add" onclick="openAddUserModal()">+ Tambah User</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="userTable"><thead><tr><th>Username</th><th>Nama Lengkap</th><th>Role</th><th>Site</th><th>Status</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ======================= MODAL: CETAK QR CHECKPOINT ======================= -->
+<div id="qrModalOverlay" class="modal-overlay">
+  <div class="modal-box" style="text-align:center;max-width:320px;">
+    <div id="qrModalLabel" style="font-size:15px;font-weight:700;margin-bottom:2px;"></div>
+    <div id="qrModalSite" style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;"></div>
+    <div id="qrModalCanvas" style="display:flex;justify-content:center;margin-bottom:12px;"></div>
+    <div id="qrModalCode" style="font-size:11.5px;color:var(--text-secondary);margin-bottom:18px;"></div>
+    <div class="modal-actions" style="margin-top:0;">
+      <button onclick="closeModal('qrModalOverlay')" class="btn-secondary">Tutup</button>
+      <button onclick="printQrModal()" class="btn-primary-full" style="flex:1;">🖨 Cetak</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODAL: TAMBAH / EDIT SITE ======================= -->
+<div id="addSiteModalOverlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="siteModalTitle">Tambah Site Baru</div>
+    <div class="modal-sub">Site = lokasi/gedung tempat penempatan Satpam</div>
+    <div class="modal-error" id="addSiteError"></div>
+    <input type="hidden" id="siteEditId">
+    <label class="field-label">Nama Site</label>
+    <input class="field-input" id="siteName" placeholder="Contoh: Gedung A - Kantor Pusat">
+    <label class="field-label">Alamat</label>
+    <input class="field-input" id="siteAddress" placeholder="Alamat lengkap">
+    <button type="button" class="btn-locate" onclick="useMyLocation('siteLat','siteLng')">📍 Pakai Lokasi Saya Saat Ini</button>
+    <label class="field-label">Latitude</label>
+    <input class="field-input" id="siteLat" placeholder="-6.917500" type="number" step="any">
+    <label class="field-label">Longitude</label>
+    <input class="field-input" id="siteLng" placeholder="107.619100" type="number" step="any">
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('addSiteModalOverlay')">Batal</button>
+      <button class="btn-primary-full" style="flex:1;" id="siteModalSubmitBtn" onclick="submitAddSite()">Simpan Site</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODAL: TAMBAH / EDIT CHECKPOINT ======================= -->
+<div id="addCheckpointModalOverlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="cpModalTitle">Tambah Checkpoint</div>
+    <div class="modal-sub">Titik patroli di dalam sebuah site. Kode QR dibuat otomatis.</div>
+    <div class="modal-error" id="addCheckpointError"></div>
+    <input type="hidden" id="cpEditId">
+    <label class="field-label">Site</label>
+    <select class="field-input" id="cpSiteId"></select>
+    <label class="field-label">Nama Checkpoint</label>
+    <input class="field-input" id="cpName" placeholder="Contoh: Lobby Lantai 1">
+    <button type="button" class="btn-locate" onclick="useMyLocation('cpLat','cpLng')">📍 Pakai Lokasi Saya Saat Ini</button>
+    <label class="field-label">Latitude</label>
+    <input class="field-input" id="cpLat" placeholder="-6.917500" type="number" step="any">
+    <label class="field-label">Longitude</label>
+    <input class="field-input" id="cpLng" placeholder="107.619100" type="number" step="any">
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('addCheckpointModalOverlay')">Batal</button>
+      <button class="btn-primary-full" style="flex:1;" id="cpModalSubmitBtn" onclick="submitAddCheckpoint()">Simpan Checkpoint</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODAL: TAMBAH / EDIT USER ======================= -->
+<div id="addUserModalOverlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="userModalTitle">Tambah User / Petugas</div>
+    <div class="modal-sub">Akun ini dipakai untuk login di aplikasi mobile (dan dashboard jika role-nya Admin/Danru/Supervisor)</div>
+    <div class="modal-error" id="addUserError"></div>
+    <input type="hidden" id="userEditId">
+    <label class="field-label">Username (untuk login)</label>
+    <input class="field-input" id="userUsername" placeholder="Contoh: sendhy" autocomplete="off">
+    <label class="field-label">Nama Lengkap</label>
+    <input class="field-input" id="userFullName" placeholder="Nama petugas">
+    <label class="field-label">Role</label>
+    <select class="field-input" id="userRole">
+      <option value="Satpam">Satpam</option>
+      <option value="Danru">Danru</option>
+      <option value="Supervisor">Supervisor</option>
+      <option value="Super Admin">Super Admin</option>
+    </select>
+    <label class="field-label">Site Penempatan</label>
+    <select class="field-input" id="userSiteId"></select>
+    <label class="field-label" id="userStatusLabel" style="display:none;">Status</label>
+    <select class="field-input" id="userStatus" style="display:none;">
+      <option value="Active">Active</option>
+      <option value="Inactive">Inactive</option>
+    </select>
+    <label class="field-label" id="userPinLabel">PIN (untuk login)</label>
+    <input class="field-input" id="userPin" placeholder="Contoh: 123456" type="text">
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('addUserModalOverlay')">Batal</button>
+      <button class="btn-primary-full" style="flex:1;" id="userModalSubmitBtn" onclick="submitAddUser()">Simpan User</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * DASHBOARD PATROLI SECURITY - dijalankan langsung dari Apps Script (HtmlService)
+ * Semua pengambilan/penulisan data memakai google.script.run (bukan fetch),
+ * sehingga tidak perlu API_URL / deployment URL terpisah.
+ */
+const AUTO_REFRESH_MS = 30000;
+let state = { sites: [], checkpoints: [], patrolLogs: [], incidents: [], guests: [], users: [], summary: null, patrolStatus: [], patrolStatusPerUser: [] };
+let mapInstance = null, mapMarkersLayer = null;
+let currentUser = null;
+
+/* ============================================================
+ *  LOGIN / SESSION
+ *  Session disimpan di sessionStorage (hilang saat tab ditutup) -
+ *  bukan localStorage, supaya tidak "nyangkut" login di komputer publik/shared.
+ * ============================================================ */
+function runServer(fnName, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(err => reject(err))
+      [fnName](...args);
+  });
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function handleLogin() {
+  const username = document.getElementById('loginUserId').value.trim();
+  const pin = document.getElementById('loginPin').value.trim();
+  const btn = document.getElementById('loginBtn');
+  document.getElementById('loginError').style.display = 'none';
+
+  if (!username || !pin) { showLoginError('Username dan PIN wajib diisi'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Memeriksa...';
+  try {
+    const user = await runServer('dash_login', username, pin);
+    currentUser = user;
+    sessionStorage.setItem('dash_user', JSON.stringify(user));
+    enterDashboard();
+  } catch (err) {
+    showLoginError((err && err.message) ? err.message : 'Login gagal');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Masuk Dashboard';
+  }
+}
+
+function handleLogout() {
+  sessionStorage.removeItem('dash_user');
+  currentUser = null;
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginUserId').value = '';
+  document.getElementById('loginPin').value = '';
+}
+
+function enterDashboard() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  document.getElementById('userNameLabel').textContent = currentUser.full_name;
+  document.getElementById('userRoleLabel').textContent = currentUser.role;
+  document.getElementById('userAvatar').textContent = (currentUser.full_name || '?').charAt(0).toUpperCase();
+
+  // Kelola User hanya untuk Super Admin
+  const usersNavBtn = document.querySelector('.nav-item[data-page="users"]');
+  if (currentUser.role !== 'Super Admin') {
+    usersNavBtn.style.display = 'none';
+  } else {
+    usersNavBtn.style.display = 'flex';
+  }
+
+  loadAll();
+  setInterval(loadAll, AUTO_REFRESH_MS);
+}
+
+function checkExistingSession() {
+  const raw = sessionStorage.getItem('dash_user');
+  if (raw) {
+    try {
+      currentUser = JSON.parse(raw);
+      enterDashboard();
+      return;
+    } catch (e) { /* fallthrough ke login */ }
+  }
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+/* ============================================================
+ *  LOAD DATA
+ * ============================================================ */
+function setConnStatus(ok, message) {
+  const el = document.getElementById('connStatus');
+  el.innerHTML = `<span class="dot ${ok ? 'dot-ok' : 'dot-err'}"></span> ${message}`;
+}
+
+async function loadAll() {
+  setConnStatus(false, 'Memuat data...');
+  try {
+    const calls = [
+      runServer('dash_getSummary'),
+      runServer('dash_getPatrolStatus'),
+      runServer('dash_getPatrolStatusPerUser'),
+      runServer('dash_getSites'),
+      runServer('dash_getCheckpoints'),
+      runServer('dash_getPatrolLogs'),
+      runServer('dash_getIncidents'),
+      runServer('dash_getGuests'),
+    ];
+    if (currentUser && currentUser.role === 'Super Admin') calls.push(runServer('dash_getUsers'));
+
+    const results = await Promise.all(calls);
+    const [summary, patrolStatus, patrolStatusPerUser, sites, checkpoints, patrolLogs, incidents, guests, users] = results;
+    state = { summary, patrolStatus, patrolStatusPerUser, sites, checkpoints, patrolLogs, incidents, guests, users: users || [] };
+
+    renderOverview(); renderMap(); renderPatrolTable();
+    renderIncidents(); renderGuests(); renderSites(); renderUsers(); populateSiteSelects();
+    setConnStatus(true, 'Terhubung • data live');
+  } catch (err) {
+    console.error(err);
+    setConnStatus(false, 'Gagal memuat data dari Apps Script');
+  }
+}
+
+function renderOverview() {
+  const s = state.summary || {};
+  document.getElementById('statUsers').textContent = s.total_users ?? '–';
+  document.getElementById('statPatrol').textContent = s.patrol_scans_today ?? '–';
+  document.getElementById('statIncidents').textContent = s.incidents_today ?? '–';
+  document.getElementById('statGuests').textContent = s.guests_active ?? '–';
+
+  const listEl = document.getElementById('patrolStatusList');
+  listEl.innerHTML = '';
+  if (!state.patrolStatus.length) { listEl.innerHTML = emptyState('Belum ada data site'); }
+  else state.patrolStatus.forEach(site => {
+    const total = site.total_checkpoints || 0, done = site.completed || 0;
+    const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+    const div = document.createElement('div');
+    div.className = 'status-item';
+    div.innerHTML = `<div class="status-item-top"><span class="status-item-title">${escapeHtml(site.site_name)}</span><span class="status-item-frac">${done}/${total} Checkpoint</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+    listEl.appendChild(div);
+  });
+
+  const incEl = document.getElementById('latestIncidents');
+  incEl.innerHTML = '';
+  const latestIncidents = (s.latest_incidents || []);
+  if (!latestIncidents.length) { incEl.innerHTML = emptyState('Belum ada insiden'); }
+  else latestIncidents.forEach(inc => {
+    const div = document.createElement('div');
+    div.className = 'incident-row';
+    div.innerHTML = `<div class="incident-badge">⚠️</div><div><div class="incident-title">${escapeHtml(inc.title)}</div><div class="incident-desc">${escapeHtml(truncate(inc.description, 70))}</div><div class="incident-meta">${escapeHtml(inc.timestamp)} • ${escapeHtml(inc.user_id)}</div></div>`;
+    incEl.appendChild(div);
+  });
+
+  const userStatusTbody = document.querySelector('#patrolStatusUserTable tbody');
+  userStatusTbody.innerHTML = '';
+  const patrolStatusPerUser = state.patrolStatusPerUser || [];
+  if (!patrolStatusPerUser.length) {
+    userStatusTbody.innerHTML = emptyRow(6);
+  } else {
+    const statusPillClass = {
+      'Selesai': 'pill-success',
+      'Berjalan': 'pill-warning',
+      'Belum Mulai': 'pill-danger',
+      'Tanpa Checkpoint': 'pill-neutral'
+    };
+    // Alias nama role supaya yang tampil di dashboard bisa beda dari nilai
+    // asli di sheet Users. Role yang tidak ada di mapping ini akan
+    // ditampilkan apa adanya (nilai asli dari sheet).
+    const roleAlias = {
+      'Satpam': 'Petugas Lapangan',
+      'Danru': 'Komandan Regu',
+      'Supervisor': 'Supervisor',
+      'Super Admin': 'Super Admin'
+    };
+    patrolStatusPerUser.forEach(u => {
+      const total = u.total_checkpoints || 0, done = u.completed || 0;
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      const pillClass = statusPillClass[u.status] || 'pill-neutral';
+      const roleLabel = roleAlias[u.role] || u.role || '-';
+      userStatusTbody.innerHTML += `<tr>
+        <td>${escapeHtml(u.full_name)}</td>
+        <td><span class="pill pill-neutral">${escapeHtml(roleLabel)}</span></td>
+        <td>${escapeHtml(u.site_name)}</td>
+        <td><div class="progress-bar" style="width:110px;display:inline-block;vertical-align:middle;margin-right:8px;"><div class="progress-fill" style="width:${pct}%"></div></div>${done}/${total}</td>
+        <td><span class="pill ${pillClass}">${escapeHtml(u.status)}</span></td>
+        <td>${u.last_patrol_time ? escapeHtml(u.last_patrol_time) : '-'}</td>
+      </tr>`;
+    });
+  }
+
+  const tbody = document.querySelector('#latestPatrolTable tbody');
+  tbody.innerHTML = '';
+  const latestPatrol = (s.latest_patrol || []);
+  if (!latestPatrol.length) tbody.innerHTML = emptyRow(4);
+  else latestPatrol.forEach(log => {
+    const cp = state.checkpoints.find(c => c.checkpoint_id === log.checkpoint_id);
+    tbody.innerHTML += `<tr><td>${escapeHtml(log.timestamp)}</td><td>${escapeHtml(log.user_id)}</td><td>${escapeHtml(cp ? cp.checkpoint_name : log.checkpoint_id)}</td><td>${escapeHtml(log.notes || '-')}</td></tr>`;
+  });
+}
+
+function renderMap() {
+  if (!mapInstance) {
+    mapInstance = L.map('map').setView([-6.9175, 107.6191], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 }).addTo(mapInstance);
+    mapMarkersLayer = L.layerGroup().addTo(mapInstance);
+  }
+  mapMarkersLayer.clearLayers();
+  const bounds = [];
+  state.checkpoints.forEach(cp => {
+    const lat = parseFloat(cp.target_lat), lng = parseFloat(cp.target_long);
+    if (isNaN(lat) || isNaN(lng)) return;
+    L.circleMarker([lat, lng], { radius: 8, color: '#0B5FFF', fillColor: '#0B5FFF', fillOpacity: 0.85, weight: 2 })
+      .bindPopup(`<b>${escapeHtml(cp.checkpoint_name)}</b><br>Checkpoint • ${escapeHtml(cp.qr_code_val)}`)
+      .addTo(mapMarkersLayer);
+    bounds.push([lat, lng]);
+  });
+  const latestByUser = {};
+  state.patrolLogs.forEach(log => {
+    if (!latestByUser[log.user_id] || log.timestamp > latestByUser[log.user_id].timestamp) latestByUser[log.user_id] = log;
+  });
+  Object.values(latestByUser).forEach(log => {
+    const lat = parseFloat(log.scan_lat), lng = parseFloat(log.scan_long);
+    if (isNaN(lat) || isNaN(lng)) return;
+    L.circleMarker([lat, lng], { radius: 9, color: '#16A34A', fillColor: '#16A34A', fillOpacity: 0.9, weight: 2 })
+      .bindPopup(`<b>${escapeHtml(log.user_id)}</b><br>Scan terakhir: ${escapeHtml(log.timestamp)}<br>${escapeHtml(log.notes || '')}`)
+      .addTo(mapMarkersLayer);
+    bounds.push([lat, lng]);
+  });
+  if (bounds.length) mapInstance.fitBounds(bounds, { padding: [30, 30] });
+  setTimeout(() => mapInstance.invalidateSize(), 200);
+}
+
+function renderPatrolTable() {
+  const tbody = document.querySelector('#patrolTable tbody');
+  tbody.innerHTML = '';
+  if (!state.patrolLogs.length) { tbody.innerHTML = emptyRow(7); return; }
+  state.patrolLogs.forEach(log => {
+    const cp = state.checkpoints.find(c => c.checkpoint_id === log.checkpoint_id);
+    tbody.innerHTML += `<tr>
+      <td>${escapeHtml(log.log_id)}</td><td>${escapeHtml(log.timestamp)}</td><td>${escapeHtml(log.user_id)}</td>
+      <td>${escapeHtml(cp ? cp.checkpoint_name : log.checkpoint_id)}</td>
+      <td>${escapeHtml(log.scan_lat)}, ${escapeHtml(log.scan_long)}</td><td>${escapeHtml(log.notes || '-')}</td>
+      <td>${log.photo_url ? `<a class="photo-link" href="${escapeAttr(log.photo_url)}" target="_blank">Lihat Foto</a>` : '-'}</td>
+    </tr>`;
+  });
+}
+
+function renderIncidents() {
+  const grid = document.getElementById('incidentGrid');
+  grid.innerHTML = '';
+  if (!state.incidents.length) { grid.innerHTML = emptyState('Belum ada laporan insiden'); return; }
+  const critical = ['Kebakaran', 'Pencurian'];
+  state.incidents.forEach(inc => {
+    const isCritical = critical.includes(inc.title);
+    const hasLoc = inc.lat !== undefined && inc.lat !== '' && inc.long !== undefined && inc.long !== '';
+    const mapsUrl = hasLoc ? `https://www.google.com/maps?q=${encodeURIComponent(inc.lat)},${encodeURIComponent(inc.long)}` : '';
+    grid.innerHTML += `<div class="incident-card"><span class="pill ${isCritical ? 'pill-danger' : 'pill-warning'}">${escapeHtml(inc.title)}</span><div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">${escapeHtml(inc.timestamp)} • ${escapeHtml(inc.user_id)}</div><div style="font-size:13px;">${escapeHtml(inc.description)}</div><div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;">${inc.photo_url ? `<a class="photo-link" href="${escapeAttr(inc.photo_url)}" target="_blank">Lihat Foto Bukti →</a>` : ''}${hasLoc ? `<a class="photo-link" href="${escapeAttr(mapsUrl)}" target="_blank">📍 Lihat Lokasi →</a>` : ''}</div></div>`;
+  });
+}
+
+function renderGuests() {
+  const tbody = document.querySelector('#guestTable tbody');
+  tbody.innerHTML = '';
+  if (!state.guests.length) { tbody.innerHTML = emptyRow(7); return; }
+  state.guests.forEach(g => {
+    const done = !!g.checkout_time;
+    tbody.innerHTML += `<tr><td>${escapeHtml(g.guest_name)}</td><td>${escapeHtml(g.identity_no || '-')}</td><td>${escapeHtml(g.destination)}</td><td>${escapeHtml(g.purpose)}</td><td>${escapeHtml(g.checkin_time)}</td><td>${escapeHtml(g.checkout_time || '-')}</td><td><span class="pill ${done ? 'pill-neutral' : 'pill-success'}">${done ? 'Selesai' : 'Di Dalam Area'}</span></td></tr>`;
+  });
+}
+
+function renderSites() {
+  const listEl = document.getElementById('sitesList');
+  listEl.innerHTML = '';
+  if (!state.sites.length) { listEl.innerHTML = emptyState('Belum ada site terdaftar'); }
+  else state.sites.forEach(site => {
+    const cpCount = state.checkpoints.filter(c => c.site_id === site.site_id).length;
+    const div = document.createElement('div');
+    div.className = 'status-item';
+    div.innerHTML = `<div class="status-item-top"><span class="status-item-title">${escapeHtml(site.site_name)}</span>
+      <div class="row-actions">
+        <span class="status-item-frac">${cpCount} Checkpoint</span>
+        <button class="btn-icon" title="Edit" onclick='openEditSiteModal(${JSON.stringify(site.site_id)})'>✎</button>
+        <button class="btn-icon danger" title="Hapus" onclick='confirmDeleteSite(${JSON.stringify(site.site_id)}, ${JSON.stringify(site.site_name)})'>🗑</button>
+      </div>
+    </div><div style="font-size:12px;color:var(--text-secondary);">${escapeHtml(site.address)}</div>`;
+    listEl.appendChild(div);
+  });
+
+  const tbody = document.querySelector('#checkpointTable tbody');
+  tbody.innerHTML = '';
+  if (!state.checkpoints.length) tbody.innerHTML = emptyRow(4);
+  else state.checkpoints.forEach(cp => {
+    const site = state.sites.find(s => s.site_id === cp.site_id);
+    const siteName = site ? site.site_name : cp.site_id;
+    tbody.innerHTML += `<tr>
+      <td>${escapeHtml(siteName)}</td><td>${escapeHtml(cp.checkpoint_name)}</td><td>${escapeHtml(cp.qr_code_val)}</td>
+      <td><div class="row-actions">
+        <button class="btn-export" onclick='openQrModal(${JSON.stringify(cp.checkpoint_name)}, ${JSON.stringify(siteName)}, ${JSON.stringify(cp.qr_code_val)})'>🖨 Cetak QR</button>
+        <button class="btn-icon" title="Edit" onclick='openEditCheckpointModal(${JSON.stringify(cp.checkpoint_id)})'>✎</button>
+        <button class="btn-icon danger" title="Hapus" onclick='confirmDeleteCheckpoint(${JSON.stringify(cp.checkpoint_id)}, ${JSON.stringify(cp.checkpoint_name)})'>🗑</button>
+      </div></td>
+    </tr>`;
+  });
+}
+
+function renderUsers() {
+  const tbody = document.querySelector('#userTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!state.users.length) { tbody.innerHTML = emptyRow(6); return; }
+  state.users.forEach(u => {
+    const site = state.sites.find(s => s.site_id === u.assigned_site_id);
+    const activePill = u.status === 'Active' ? 'pill-success' : 'pill-neutral';
+    tbody.innerHTML += `<tr>
+      <td>${escapeHtml(u.username || u.user_id)}</td><td>${escapeHtml(u.full_name)}</td><td>${escapeHtml(u.role)}</td>
+      <td>${escapeHtml(site ? site.site_name : u.assigned_site_id)}</td>
+      <td><span class="pill ${activePill}">${escapeHtml(u.status)}</span></td>
+      <td><div class="row-actions">
+        <button class="btn-icon" title="Edit" onclick='openEditUserModal(${JSON.stringify(u.user_id)})'>✎</button>
+        <button class="btn-icon danger" title="Hapus" onclick='confirmDeleteUser(${JSON.stringify(u.user_id)}, ${JSON.stringify(u.full_name)})'>🗑</button>
+      </div></td>
+    </tr>`;
+  });
+}
+
+function populateSiteSelects() {
+  const opts = state.sites.map(s => `<option value="${escapeAttr(s.site_id)}">${escapeHtml(s.site_name)}</option>`).join('');
+  const cpSel = document.getElementById('cpSiteId');
+  const userSel = document.getElementById('userSiteId');
+  if (cpSel) cpSel.innerHTML = opts || '<option value="">Belum ada site</option>';
+  if (userSel) userSel.innerHTML = opts || '<option value="">Belum ada site</option>';
+}
+
+/* ============================================================
+ *  MODAL HELPERS
+ * ============================================================ */
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+
+function useMyLocation(latFieldId, lngFieldId) {
+  if (!navigator.geolocation) { alert('Browser tidak mendukung geolocation.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById(latFieldId).value = pos.coords.latitude.toFixed(6);
+      document.getElementById(lngFieldId).value = pos.coords.longitude.toFixed(6);
+    },
+    () => alert('Gagal mengambil lokasi. Pastikan izin lokasi browser diaktifkan.')
+  );
+}
+
+/* ---- Tambah / Edit Site ---- */
+function openAddSiteModal() {
+  document.getElementById('siteModalTitle').textContent = 'Tambah Site Baru';
+  document.getElementById('siteModalSubmitBtn').textContent = 'Simpan Site';
+  document.getElementById('siteEditId').value = '';
+  document.getElementById('siteName').value = '';
+  document.getElementById('siteAddress').value = '';
+  document.getElementById('siteLat').value = '';
+  document.getElementById('siteLng').value = '';
+  document.getElementById('addSiteError').style.display = 'none';
+  openModal('addSiteModalOverlay');
+}
+function openEditSiteModal(siteId) {
+  const site = state.sites.find(s => s.site_id === siteId);
+  if (!site) return;
+  document.getElementById('siteModalTitle').textContent = 'Edit Site';
+  document.getElementById('siteModalSubmitBtn').textContent = 'Simpan Perubahan';
+  document.getElementById('siteEditId').value = site.site_id;
+  document.getElementById('siteName').value = site.site_name || '';
+  document.getElementById('siteAddress').value = site.address || '';
+  document.getElementById('siteLat').value = site.latitude || '';
+  document.getElementById('siteLng').value = site.longitude || '';
+  document.getElementById('addSiteError').style.display = 'none';
+  openModal('addSiteModalOverlay');
+}
+async function submitAddSite() {
+  const editId = document.getElementById('siteEditId').value;
+  const name = document.getElementById('siteName').value.trim();
+  const address = document.getElementById('siteAddress').value.trim();
+  // PENTING: parseFloat di sini, JANGAN kirim string mentah ke server.
+  // google.script.run mempertahankan tipe data JS asli (Number tetap Number)
+  // saat dikirim ke Apps Script. Kalau yang dikirim string "-6.915079",
+  // Apps Script/Sheets bisa salah menerkanya sebagai angka lain sesuai
+  // locale spreadsheet. Dengan parseFloat di sini, nilainya sudah pasti
+  // Number yang benar sebelum meninggalkan browser.
+  const lat = parseFloat(document.getElementById('siteLat').value);
+  const lng = parseFloat(document.getElementById('siteLng').value);
+  const errEl = document.getElementById('addSiteError');
+  if (!name || !address || isNaN(lat) || isNaN(lng)) {
+    errEl.textContent = 'Semua field wajib diisi (Latitude/Longitude harus angka valid)'; errEl.style.display = 'block'; return;
+  }
+  try {
+    if (editId) {
+      await runServer('dash_updateSite', { site_id: editId, site_name: name, address: address, latitude: lat, longitude: lng });
+    } else {
+      await runServer('dash_addSite', { site_name: name, address: address, latitude: lat, longitude: lng });
+    }
+    closeModal('addSiteModalOverlay');
+    loadAll();
+  } catch (err) {
+    errEl.textContent = (err && err.message) ? err.message : 'Gagal menyimpan site';
+    errEl.style.display = 'block';
+  }
+}
+async function confirmDeleteSite(siteId, siteName) {
+  if (!confirm(`Hapus site "${siteName}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+  try {
+    await runServer('dash_deleteSite', siteId);
+    loadAll();
+  } catch (err) {
+    alert((err && err.message) ? err.message : 'Gagal menghapus site');
+  }
+}
+
+/* ---- Tambah / Edit Checkpoint ---- */
+function openAddCheckpointModal() {
+  document.getElementById('cpModalTitle').textContent = 'Tambah Checkpoint';
+  document.getElementById('cpModalSubmitBtn').textContent = 'Simpan Checkpoint';
+  document.getElementById('cpEditId').value = '';
+  document.getElementById('cpName').value = '';
+  document.getElementById('cpLat').value = '';
+  document.getElementById('cpLng').value = '';
+  document.getElementById('addCheckpointError').style.display = 'none';
+  populateSiteSelects();
+  openModal('addCheckpointModalOverlay');
+}
+function openEditCheckpointModal(checkpointId) {
+  const cp = state.checkpoints.find(c => c.checkpoint_id === checkpointId);
+  if (!cp) return;
+  document.getElementById('cpModalTitle').textContent = 'Edit Checkpoint';
+  document.getElementById('cpModalSubmitBtn').textContent = 'Simpan Perubahan';
+  document.getElementById('cpEditId').value = cp.checkpoint_id;
+  document.getElementById('cpName').value = cp.checkpoint_name || '';
+  document.getElementById('cpLat').value = cp.target_lat || '';
+  document.getElementById('cpLng').value = cp.target_long || '';
+  document.getElementById('addCheckpointError').style.display = 'none';
+  populateSiteSelects();
+  document.getElementById('cpSiteId').value = cp.site_id;
+  openModal('addCheckpointModalOverlay');
+}
+async function submitAddCheckpoint() {
+  const editId = document.getElementById('cpEditId').value;
+  const siteId = document.getElementById('cpSiteId').value;
+  const name = document.getElementById('cpName').value.trim();
+  // parseFloat di sini juga - lihat catatan lengkap di submitAddSite().
+  const lat = parseFloat(document.getElementById('cpLat').value);
+  const lng = parseFloat(document.getElementById('cpLng').value);
+  const errEl = document.getElementById('addCheckpointError');
+  if (!siteId || !name || isNaN(lat) || isNaN(lng)) {
+    errEl.textContent = 'Semua field wajib diisi (Latitude/Longitude harus angka valid)'; errEl.style.display = 'block'; return;
+  }
+  try {
+    if (editId) {
+      await runServer('dash_updateCheckpoint', { checkpoint_id: editId, site_id: siteId, checkpoint_name: name, target_lat: lat, target_long: lng });
+    } else {
+      await runServer('dash_addCheckpoint', { site_id: siteId, checkpoint_name: name, target_lat: lat, target_long: lng });
+    }
+    closeModal('addCheckpointModalOverlay');
+    loadAll();
+  } catch (err) {
+    errEl.textContent = (err && err.message) ? err.message : 'Gagal menyimpan checkpoint';
+    errEl.style.display = 'block';
+  }
+}
+async function confirmDeleteCheckpoint(checkpointId, checkpointName) {
+  if (!confirm(`Hapus checkpoint "${checkpointName}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+  try {
+    await runServer('dash_deleteCheckpoint', checkpointId);
+    loadAll();
+  } catch (err) {
+    alert((err && err.message) ? err.message : 'Gagal menghapus checkpoint');
+  }
+}
+
+/* ---- Tambah / Edit User ---- */
+function openAddUserModal() {
+  document.getElementById('userModalTitle').textContent = 'Tambah User / Petugas';
+  document.getElementById('userModalSubmitBtn').textContent = 'Simpan User';
+  document.getElementById('userEditId').value = '';
+  document.getElementById('userUsername').value = '';
+  document.getElementById('userFullName').value = '';
+  document.getElementById('userRole').value = 'Satpam';
+  document.getElementById('userPin').value = '';
+  document.getElementById('userPin').placeholder = 'Contoh: 123456';
+  document.getElementById('userPinLabel').textContent = 'PIN (untuk login)';
+  document.getElementById('userStatus').style.display = 'none';
+  document.getElementById('userStatusLabel').style.display = 'none';
+  document.getElementById('addUserError').style.display = 'none';
+  populateSiteSelects();
+  openModal('addUserModalOverlay');
+}
+function openEditUserModal(userId) {
+  const u = state.users.find(x => x.user_id === userId);
+  if (!u) return;
+  document.getElementById('userModalTitle').textContent = 'Edit User / Petugas';
+  document.getElementById('userModalSubmitBtn').textContent = 'Simpan Perubahan';
+  document.getElementById('userEditId').value = u.user_id;
+  document.getElementById('userUsername').value = u.username || '';
+  document.getElementById('userFullName').value = u.full_name || '';
+  document.getElementById('userRole').value = u.role || 'Satpam';
+  document.getElementById('userPin').value = '';
+  document.getElementById('userPin').placeholder = 'Kosongkan jika tidak diganti';
+  document.getElementById('userPinLabel').textContent = 'PIN Baru (opsional)';
+  document.getElementById('userStatus').style.display = '';
+  document.getElementById('userStatusLabel').style.display = '';
+  document.getElementById('addUserError').style.display = 'none';
+  populateSiteSelects();
+  document.getElementById('userSiteId').value = u.assigned_site_id;
+  document.getElementById('userStatus').value = u.status || 'Active';
+  openModal('addUserModalOverlay');
+}
+async function submitAddUser() {
+  const editId = document.getElementById('userEditId').value;
+  const username = document.getElementById('userUsername').value.trim();
+  const fullName = document.getElementById('userFullName').value.trim();
+  const role = document.getElementById('userRole').value;
+  const siteId = document.getElementById('userSiteId').value;
+  const pin = document.getElementById('userPin').value.trim();
+  const errEl = document.getElementById('addUserError');
+  if (!username || !fullName || !role || !siteId || (!editId && !pin)) {
+    errEl.textContent = 'Semua field wajib diisi'; errEl.style.display = 'block'; return;
+  }
+  try {
+    if (editId) {
+      const status = document.getElementById('userStatus').value;
+      const payload = { user_id: editId, username: username, full_name: fullName, role: role, assigned_site_id: siteId, status: status };
+      if (pin) payload.pin_pass = pin;
+      await runServer('dash_updateUser', payload);
+    } else {
+      await runServer('dash_addUser', { username: username, full_name: fullName, role: role, assigned_site_id: siteId, pin_pass: pin, status: 'Active' });
+    }
+    closeModal('addUserModalOverlay');
+    loadAll();
+  } catch (err) {
+    errEl.textContent = (err && err.message) ? err.message : 'Gagal menyimpan user';
+    errEl.style.display = 'block';
+  }
+}
+async function confirmDeleteUser(userId, fullName) {
+  if (!confirm(`Hapus user "${fullName}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+  try {
+    await runServer('dash_deleteUser', userId);
+    loadAll();
+  } catch (err) {
+    alert((err && err.message) ? err.message : 'Gagal menghapus user');
+  }
+}
+
+/* ---- Cetak QR Checkpoint ---- */
+function openQrModal(name, siteName, qrValue) {
+  document.getElementById('qrModalLabel').textContent = name;
+  document.getElementById('qrModalSite').textContent = siteName;
+  document.getElementById('qrModalCode').textContent = qrValue;
+  const canvasEl = document.getElementById('qrModalCanvas');
+  canvasEl.innerHTML = '';
+  new QRCode(canvasEl, { text: qrValue, width: 220, height: 220, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  openModal('qrModalOverlay');
+}
+function printQrModal() {
+  const label = document.getElementById('qrModalLabel').textContent;
+  const site = document.getElementById('qrModalSite').textContent;
+  const code = document.getElementById('qrModalCode').textContent;
+  const imgHtml = document.getElementById('qrModalCanvas').innerHTML;
+  const printWindow = window.open('', '_blank', 'width=400,height=500');
+  printWindow.document.write(`
+    <html><head><title>QR ${label}</title>
+    <style>
+      body{font-family:Inter,sans-serif;text-align:center;padding:40px;}
+      h2{margin-bottom:2px;} p{color:#666;margin-top:0;font-size:13px;}
+      .code{margin-top:14px;font-size:12px;color:#666;}
+    </style></head>
+    <body>
+      <h2>${label}</h2>
+      <p>${site}</p>
+      <div>${imgHtml}</div>
+      <div class="code">${code}</div>
+      <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>
+  `);
+  printWindow.document.close();
+}
+
+/* ============================================================
+ *  EXPORT KE EXCEL (.xlsx)
+ * ============================================================ */
+function exportToExcel(data, filename, sheetName) {
+  if (!data || !data.length) { alert('Tidak ada data untuk diekspor.'); return; }
+  const cleaned = data.map(({ __row, ...rest }) => rest);
+  const ws = XLSX.utils.json_to_sheet(cleaned);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+/* ============================================================
+ *  UTIL
+ * ============================================================ */
+function escapeHtml(str) {
+  if (str === undefined || str === null) return '';
+  return String(str).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+function escapeAttr(str) { return escapeHtml(str).replaceAll('"', '&quot;'); }
+function truncate(str, n) { if (!str) return ''; return str.length > n ? str.slice(0, n) + '…' : str; }
+function emptyState(msg) { return `<div style="text-align:center;padding:30px;color:var(--text-secondary);font-size:13px;">${escapeHtml(msg)}</div>`; }
+function emptyRow(colspan) { return `<tr class="empty-row"><td colspan="${colspan}">Belum ada data</td></tr>`; }
+
+/* ============================================================
+ *  NAVIGATION
+ * ============================================================ */
+const pageTitles = { overview: 'Ringkasan Operasional', map: 'Peta Live Monitoring', patrol: 'Riwayat Patroli', attendance: 'Riwayat Absensi', incidents: 'Laporan Insiden', guests: 'Buku Tamu Digital', sites: 'Site & Checkpoint', users: 'Kelola User' };
+
+function initNav() {
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const page = btn.dataset.page;
+      document.getElementById(`page-${page}`).classList.add('active');
+      document.getElementById('pageTitle').textContent = pageTitles[page] || '';
+      document.getElementById('sidebar').classList.remove('open');
+      if (page === 'map') setTimeout(() => mapInstance && mapInstance.invalidateSize(), 150);
+    });
+  });
+  document.getElementById('hamburger').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+}
+
+function initToday() {
+  const now = new Date();
+  document.getElementById('todayBadge').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function initExportButtons() {
+  document.getElementById('exportPatrolBtn').addEventListener('click', () => exportToExcel(state.patrolLogs, 'Laporan_Patroli.xlsx', 'Patroli'));
+  document.getElementById('exportAttendanceBtn').addEventListener('click', () => exportToExcel(state.attendanceLogs, 'Laporan_Absensi.xlsx', 'Absensi'));
+  document.getElementById('exportIncidentBtn').addEventListener('click', () => exportToExcel(state.incidents, 'Laporan_Insiden.xlsx', 'Insiden'));
+  document.getElementById('exportGuestBtn').addEventListener('click', () => exportToExcel(state.guests, 'Buku_Tamu.xlsx', 'Tamu'));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initNav(); initToday(); initExportButtons();
+  document.getElementById('refreshBtn').addEventListener('click', loadAll);
+  document.getElementById('loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  checkExistingSession();
+});
+</script>
+</body>
+</html>

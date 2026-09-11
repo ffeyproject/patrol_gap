@@ -1,0 +1,67 @@
+name: patroli_security_app
+description: Aplikasi Mobile Security & Patroli Real-Time (Face Recognition, GPS, QR Checkpoint)
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # HTTP & backend
+  http: ^1.2.0
+
+  # Local storage (offline mode / sync queue & hardware-backed keystore)
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.2.2
+  sqflite: ^2.3.2
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Kamera, wajah, lokasi
+  camera: ^0.10.5+9
+  google_mlkit_face_detection: ^0.10.0
+  geolocator: ^11.0.0
+  permission_handler: ^11.3.0
+
+  # QR Code
+  mobile_scanner: ^5.0.1
+  qr_flutter: ^4.1.0
+
+  # Peta ringan (opsional, untuk preview lokasi)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+
+  # Util
+  intl: ^0.19.0
+  connectivity_plus: ^6.0.1
+  image_picker: ^1.0.7
+
+  # Watermark foto (nama, tanggal, lokasi, koordinat) & reverse-geocoding
+  image: ^4.2.0
+  geocoding: ^3.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.13.1
+
+# Konfigurasi Icon Aplikasi
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/images/logo.png"
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
+
+  # Memverifikasi aset gambar agar terdaftar dalam proyek
+  assets:
+    - assets/images/
+    - assets/images/logo.png
+    - assets/images/patrol_banner.jpg
