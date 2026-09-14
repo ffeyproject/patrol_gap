@@ -44,6 +44,14 @@ class ApiService {
   /// Cek apakah token tersedia
   bool get hasToken => _authToken != null && _authToken!.isNotEmpty;
 
+  /// Token autentikasi aktif
+  String? get authToken => _authToken;
+
+  /// Header untuk memuat gambar privat dari server
+  Map<String, String> get imageHeaders => _authToken != null && _authToken!.isNotEmpty
+      ? {'Authorization': 'Bearer $_authToken', 'Accept': 'image/*, */*'}
+      : {'Accept': 'image/*, */*'};
+
   Map<String, String> _buildHeaders({bool isJson = true}) {
     final headers = <String, String>{
       'Accept': 'application/json',

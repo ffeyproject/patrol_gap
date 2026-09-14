@@ -156,7 +156,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
             TextField(
               controller: serverCtrl,
               decoration: InputDecoration(
-                hintText: 'http://10.0.2.2:8000/api/v1',
+                hintText: 'https://patroli.portalgapsoft.xyz/api/v1',
                 filled: true,
                 fillColor: const Color(0xFFF8FAFC),
                 contentPadding: const EdgeInsets.all(14),
@@ -174,7 +174,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
             ),
             const SizedBox(height: 10),
             const Text(
-              '• Android Emulator: http://10.0.2.2:8000/api/v1\n• HP Fisik (WiFi): http://IP_KOMPUTER:8000/api/v1\n• Localhost: http://127.0.0.1:8000/api/v1',
+              '• Default Production: https://patroli.portalgapsoft.xyz/api/v1\n• Localhost / IP Komputer: http://192.168.1.X:8000/api/v1',
               style: TextStyle(
                   fontSize: 11, color: Color(0xFF64748B), height: 1.45),
             ),

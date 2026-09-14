@@ -46,7 +46,7 @@ class UpdateService {
   static final UpdateService instance = UpdateService._();
 
   /// URL default untuk manifest version.json di server apk.produksionline.xyz
-  static const String defaultUpdateUrl = 'https://apk.produksionline.xyz/version.json';
+  static const String defaultUpdateUrl = 'https://apk.produksionline.xyz/files/version.json';
 
   bool _isChecking = false;
 
@@ -65,30 +65,103 @@ class UpdateService {
       final localVersionCode = int.tryParse(localInfo.buildNumber) ?? 1;
       final localVersionName = localInfo.version;
 
-      // 1. Coba ambil dari manifest update server apk.produksionline.xyz
       AppUpdateInfo? remoteUpdate;
-      try {
-        final res = await http.get(
-          Uri.parse(defaultUpdateUrl),
-          headers: {'Accept': 'application/json'},
-        ).timeout(const Duration(seconds: 8));
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final headers = {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
 
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          if (data is Map<String, dynamic>) {
-            remoteUpdate = AppUpdateInfo.fromJson(data);
-          }
-        }
-      } catch (_) {
-        // Fallback: jika direct static JSON gagal, coba query API Backend jika endpoint tersedia
+      // 1. Coba ambil dari manifest update version.json di /files/ atau root
+      final manifestUrls = [
+        'https://apk.produksionline.xyz/files/version.json?t=$timestamp',
+        'https://apk.produksionline.xyz/version.json?t=$timestamp',
+      ];
+
+      for (final url in manifestUrls) {
         try {
-          final fallbackUri = Uri.parse('${ApiConfig.baseUrl}/app-version');
+          final res = await http.get(
+            Uri.parse(url),
+            headers: headers,
+          ).timeout(const Duration(seconds: 6));
+
+          if (res.statusCode == 200 && res.body.trim().startsWith('{')) {
+            final data = jsonDecode(res.body);
+            if (data is Map<String, dynamic> && data['version'] != null) {
+              remoteUpdate = AppUpdateInfo.fromJson(data);
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Fallback cerdas: Auto-deteksi file APK terbaru dari listing /files/ jika version.json belum di-upload
+      if (remoteUpdate == null) {
+        try {
+          final filesRes = await http.get(
+            Uri.parse('https://apk.produksionline.xyz/files/?t=$timestamp'),
+            headers: headers,
+          ).timeout(const Duration(seconds: 6));
+
+          if (filesRes.statusCode == 200 && filesRes.body.trim().startsWith('[')) {
+            final decoded = jsonDecode(filesRes.body);
+            if (decoded is List) {
+              String? highestVer;
+              String? highestApkName;
+              int highestSize = 0;
+
+              final regex = RegExp(
+                r'patroli[_\-\s]*gap[_\-\s]*v?([0-9]+(?:\.[0-9]+)*)\.apk',
+                caseSensitive: false,
+              );
+
+              for (final item in decoded) {
+                if (item is Map && item['name'] != null && item['type'] == 'file') {
+                  final name = item['name'].toString();
+                  final match = regex.firstMatch(name);
+                  if (match != null) {
+                    final verStr = match.group(1) ?? '';
+                    if (verStr.isNotEmpty) {
+                      if (highestVer == null || _compareVersions(verStr, highestVer) > 0) {
+                        highestVer = verStr;
+                        highestApkName = name;
+                        highestSize = int.tryParse(item['size']?.toString() ?? '') ?? 0;
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (highestVer != null && highestApkName != null) {
+                final sizeMb = highestSize > 0
+                    ? '${(highestSize / (1024 * 1024)).toStringAsFixed(1)} MB'
+                    : '101.9 MB';
+
+                remoteUpdate = AppUpdateInfo(
+                  version: highestVer,
+                  versionCode: 0,
+                  apkUrl: 'https://apk.produksionline.xyz/files/$highestApkName',
+                  changelog: '• Pembaruan sistem & fitur patroli terbaru versi $highestVer\n• Peningkatan kestabilan performa aplikasi',
+                  forceUpdate: false,
+                  fileSize: sizeMb,
+                );
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. Fallback: jika direct static gagal, coba query API Backend
+      if (remoteUpdate == null) {
+        try {
+          final fallbackUri = Uri.parse('${ApiConfig.baseUrl}/app-version?t=$timestamp');
           final res = await http.get(
             fallbackUri,
-            headers: {'Accept': 'application/json'},
+            headers: headers,
           ).timeout(const Duration(seconds: 5));
 
-          if (res.statusCode == 200) {
+          if (res.statusCode == 200 && res.body.trim().startsWith('{')) {
             final data = jsonDecode(res.body);
             if (data is Map<String, dynamic>) {
               final payload = data['data'] ?? data;
@@ -104,14 +177,24 @@ class UpdateService {
         return null;
       }
 
-      // 2. Bandingkan versi server dengan versi aplikasi lokal
-      final isNewerCode = remoteUpdate.versionCode > localVersionCode;
-      final isNewerSemantic = _isVersionGreaterThan(remoteUpdate.version, localVersionName);
+      // 4. Bandingkan versi server dengan versi aplikasi lokal
+      final cmp = _compareVersions(remoteUpdate.version, localVersionName);
 
-      if (isNewerCode || isNewerSemantic) {
+      if (cmp > 0) {
+        // Versi server lebih tinggi (misal server 1.0.3 > lokal 1.0.2)
         return remoteUpdate;
+      } else if (cmp == 0) {
+        // Versi semantik sama persis (misal sama-sama 1.0.2)
+        // Hanya picu update jika remote versionCode valid, bukan 0, dan lebih besar dari local versionCode
+        if (remoteUpdate.versionCode > 0 &&
+            localVersionCode > 0 &&
+            remoteUpdate.versionCode > localVersionCode &&
+            remoteUpdate.versionCode < 1000) {
+          return remoteUpdate;
+        }
       }
 
+      // Jika versi server sama atau lebih rendah, aplikasi sudah yang terbaru
       return null;
     } catch (_) {
       return null;
@@ -120,21 +203,29 @@ class UpdateService {
     }
   }
 
-  /// Membandingkan semantic version (misal: "1.0.1" > "1.0.0")
-  bool _isVersionGreaterThan(String remote, String local) {
+  /// Membandingkan dua versi semantik (mengembalikan 1 jika v1 > v2, -1 jika v1 < v2, 0 jika sama)
+  int _compareVersions(String v1, String v2) {
     try {
-      final rParts = remote.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-      final lParts = local.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-
-      for (var i = 0; i < 3; i++) {
-        final r = i < rParts.length ? rParts[i] : 0;
-        final l = i < lParts.length ? lParts[i] : 0;
-        if (r > l) return true;
-        if (r < l) return false;
+      final p1 = v1
+          .replaceAll(RegExp(r'[^0-9.]'), '')
+          .split('.')
+          .map((e) => int.tryParse(e) ?? 0)
+          .toList();
+      final p2 = v2
+          .replaceAll(RegExp(r'[^0-9.]'), '')
+          .split('.')
+          .map((e) => int.tryParse(e) ?? 0)
+          .toList();
+      final len = p1.length > p2.length ? p1.length : p2.length;
+      for (var i = 0; i < len; i++) {
+        final a = i < p1.length ? p1[i] : 0;
+        final b = i < p2.length ? p2[i] : 0;
+        if (a > b) return 1;
+        if (a < b) return -1;
       }
-      return false;
+      return 0;
     } catch (_) {
-      return false;
+      return 0;
     }
   }
 

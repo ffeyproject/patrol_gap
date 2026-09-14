@@ -1,5 +1,7 @@
 library models;
 
+import '../config/api_config.dart';
+
 // Data Models terstandarisasi untuk Patroli Security Mobile App
 
 class AppUser {
@@ -64,9 +66,12 @@ class AppUser {
     final parsedPhone = json['phone']?.toString() ??
         json['no_hp']?.toString() ??
         json['telepon']?.toString();
-    final parsedAvatar = json['avatar_url']?.toString() ??
-        json['avatar']?.toString() ??
-        json['foto']?.toString();
+    final parsedAvatar = ApiConfig.resolveImageUrl(
+      json['avatar_url']?.toString() ??
+          json['avatar']?.toString() ??
+          json['photo_url']?.toString() ??
+          json['foto']?.toString(),
+    );
     final parsedToken = authToken ??
         json['token']?.toString() ??
         (rawJson is Map ? rawJson['token']?.toString() : null);
@@ -189,7 +194,12 @@ class CheckpointModel {
       scannedAt: json['scanned_at']?.toString(),
       distanceMeters: double.tryParse(json['distance_meters']?.toString() ?? ''),
       conditionStatus: json['condition_status']?.toString() ?? 'normal',
-      selfieUrl: json['selfie_url']?.toString() ?? json['selfie_photo_url']?.toString(),
+      selfieUrl: ApiConfig.resolveImageUrl(
+        json['selfie_url']?.toString() ??
+            json['selfie_photo_url']?.toString() ??
+            json['selfie_photo']?.toString() ??
+            json['photo_url']?.toString(),
+      ),
     );
   }
 
@@ -616,7 +626,15 @@ class CheckpointRecapLogItem {
       condition: json['condition']?.toString() ?? json['status']?.toString() ?? 'Aman',
       notes: json['notes']?.toString() ?? json['catatan']?.toString(),
       distanceMeters: double.tryParse(json['distance_meters']?.toString() ?? json['distance']?.toString() ?? ''),
-      selfiePhotoUrl: json['selfie_photo_url']?.toString() ?? json['photo_url']?.toString() ?? json['selfie_photo']?.toString(),
+      selfiePhotoUrl: ApiConfig.resolveImageUrl(
+        json['selfie_photo_url']?.toString() ??
+            json['photo_url']?.toString() ??
+            json['selfie_photo']?.toString() ??
+            json['photo']?.toString() ??
+            json['selfie_url']?.toString() ??
+            json['image_url']?.toString() ??
+            json['foto']?.toString(),
+      ),
       latitude: double.tryParse(json['latitude']?.toString() ?? ''),
       longitude: double.tryParse(json['longitude']?.toString() ?? ''),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/common_widgets.dart';
 
 class IncidentDetailScreen extends StatelessWidget {
   final IncidentModel incident;
@@ -26,7 +27,7 @@ class IncidentDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _buildPhoto(),
+          _buildPhoto(context),
           const SizedBox(height: 18),
           _buildHeader(),
           const SizedBox(height: 18),
@@ -50,7 +51,7 @@ class IncidentDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPhoto() {
+  Widget _buildPhoto(BuildContext context) {
     final photo = incident.photoUrl;
     if (photo == null || photo.trim().isEmpty) {
       return Container(
@@ -72,29 +73,46 @@ class IncidentDetailScreen extends StatelessWidget {
       );
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: AspectRatio(
-        aspectRatio: 16 / 10,
-        child: Image.network(
-          photo,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return Container(
-              color: AppColors.surface,
-              child: const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: AppColors.surface,
-              child: const Center(
-                child: Icon(Icons.broken_image_outlined, color: AppColors.textSecondary, size: 32),
+    return GestureDetector(
+      onTap: () {
+        showAppImagePreviewDialog(
+          context,
+          imageUrl: photo,
+          title: incident.title.isEmpty ? 'Foto Insiden' : incident.title,
+          subtitle: '${incident.createdAt ?? ''} • Pelapor: ${incident.reporterName ?? '-'}',
+        );
+      },
+      child: Stack(
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 10,
+            child: SafeImageView(
+              imageUrl: photo,
+              borderRadius: 18,
+              fit: BoxFit.cover,
+              fallbackText: 'Gagal memuat foto lampiran insiden',
+            ),
+          ),
+          Positioned(
+            right: 10,
+            bottom: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(20),
               ),
-            );
-          },
-        ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white),
+                  SizedBox(width: 4),
+                  Text('Perbesar', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

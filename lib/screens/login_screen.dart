@@ -5,6 +5,7 @@ import '../config/api_config.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import 'home_shell.dart';
@@ -93,6 +94,13 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _animController.forward();
+
+    // Cek pembaruan aplikasi otomatis saat halaman login dibuka
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        UpdateService.instance.checkForUpdate(context, silent: true);
+      }
+    });
   }
 
   @override
@@ -122,9 +130,17 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _applyServerUrl() async {
     final newUrl = _serverUrlCtrl.text.trim();
-    if (newUrl.isNotEmpty && newUrl != ApiConfig.baseUrl) {
+    if (newUrl.isNotEmpty) {
       await ApiConfig.setBaseUrl(newUrl);
+      _serverUrlCtrl.text = ApiConfig.baseUrl;
+      setState(() {});
     }
+  }
+
+  Future<void> _resetServerUrl() async {
+    await ApiConfig.resetBaseUrl();
+    _serverUrlCtrl.text = ApiConfig.baseUrl;
+    setState(() {});
   }
 
   Future<void> _login() async {
@@ -441,13 +457,44 @@ class _LoginScreenState extends State<LoginScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Divider(color: Color(0xFFF1F5F9), height: 16),
-                  const Text(
-                    'Ubah Alamat Server Backend:',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF475569),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Ubah Alamat Server Backend:',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () async {
+                          await _resetServerUrl();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Server URL direset ke default.'),
+                              backgroundColor: AppColors.primary,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          child: Text(
+                            'Reset Default',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -462,7 +509,7 @@ class _LoginScreenState extends State<LoginScreen>
                       color: Color(0xFF0F172A),
                     ),
                     decoration: InputDecoration(
-                      hintText: 'http://192.168.1.X:8000/api/v1',
+                      hintText: 'https://patroli.portalgapsoft.xyz/api/v1',
                       hintStyle: const TextStyle(
                         color: Color(0xFF94A3B8),
                         fontSize: 13,
@@ -506,11 +553,7 @@ class _LoginScreenState extends State<LoginScreen>
                         },
                       ),
                     ),
-                    onChanged: (val) {
-                      if (val.trim().isNotEmpty) {
-                        ApiConfig.setBaseUrl(val.trim());
-                      }
-                    },
+                    onSubmitted: (_) => _applyServerUrl(),
                   ),
                 ],
               ),

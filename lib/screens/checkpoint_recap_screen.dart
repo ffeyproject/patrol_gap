@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/common_widgets.dart';
 
 class CheckpointRecapScreen extends StatefulWidget {
   final AppUser user;
@@ -114,33 +115,395 @@ class _CheckpointRecapScreenState extends State<CheckpointRecapScreen> {
     }
   }
 
-  Future<void> _pickDateRange() async {
-    final picked = await showDateRangePicker(
+  Future<void> _showDateFilterModal() async {
+    DateTime tempStart = _startDate;
+    DateTime tempEnd = _endDate;
+
+    await showModalBottomSheet(
       context: context,
-      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF2563EB),
-              onPrimary: Colors.white,
-              onSurface: Color(0xFF0F172A),
-            ),
-          ),
-          child: child!,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isSingleDay = tempStart.year == tempEnd.year &&
+                tempStart.month == tempEnd.month &&
+                tempStart.day == tempEnd.day;
+
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final yesterday = today.subtract(const Duration(days: 1));
+            final sevenDaysAgo = today.subtract(const Duration(days: 6));
+            final firstDayOfMonth = DateTime(now.year, now.month, 1);
+
+            bool isPresetToday = tempStart.year == today.year &&
+                tempStart.month == today.month &&
+                tempStart.day == today.day &&
+                tempEnd.year == today.year &&
+                tempEnd.month == today.month &&
+                tempEnd.day == today.day;
+
+            bool isPresetYesterday = tempStart.year == yesterday.year &&
+                tempStart.month == yesterday.month &&
+                tempStart.day == yesterday.day &&
+                tempEnd.year == yesterday.year &&
+                tempEnd.month == yesterday.month &&
+                tempEnd.day == yesterday.day;
+
+            bool isPreset7Days = tempStart.year == sevenDaysAgo.year &&
+                tempStart.month == sevenDaysAgo.month &&
+                tempStart.day == sevenDaysAgo.day &&
+                tempEnd.year == today.year &&
+                tempEnd.month == today.month &&
+                tempEnd.day == today.day;
+
+            bool isPresetThisMonth = tempStart.year == firstDayOfMonth.year &&
+                tempStart.month == firstDayOfMonth.month &&
+                tempStart.day == firstDayOfMonth.day &&
+                tempEnd.year == today.year &&
+                tempEnd.month == today.month &&
+                tempEnd.day == today.day;
+
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.calendar_month_rounded,
+                              color: Color(0xFF2563EB), size: 22),
+                          SizedBox(width: 8),
+                          Text(
+                            'Pilih Periode Tanggal',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded,
+                            color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(context),
+                        splashRadius: 20,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Quick presets
+                  const Text(
+                    'Pilihan Cepat:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildPresetChip(
+                        label: 'Hari Ini',
+                        isSelected: isPresetToday,
+                        onTap: () {
+                          setModalState(() {
+                            tempStart = today;
+                            tempEnd = today;
+                          });
+                        },
+                      ),
+                      _buildPresetChip(
+                        label: 'Kemarin',
+                        isSelected: isPresetYesterday,
+                        onTap: () {
+                          setModalState(() {
+                            tempStart = yesterday;
+                            tempEnd = yesterday;
+                          });
+                        },
+                      ),
+                      _buildPresetChip(
+                        label: '7 Hari Terakhir',
+                        isSelected: isPreset7Days,
+                        onTap: () {
+                          setModalState(() {
+                            tempStart = sevenDaysAgo;
+                            tempEnd = today;
+                          });
+                        },
+                      ),
+                      _buildPresetChip(
+                        label: 'Bulan Ini',
+                        isSelected: isPresetThisMonth,
+                        onTap: () {
+                          setModalState(() {
+                            tempStart = firstDayOfMonth;
+                            tempEnd = today;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Custom Start & End Date Pickers
+                  const Text(
+                    'Rentang Tanggal Kustom:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      // Dari Tanggal
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: tempStart,
+                              firstDate: DateTime.now()
+                                  .subtract(const Duration(days: 365)),
+                              lastDate: DateTime.now()
+                                  .add(const Duration(days: 30)),
+                              helpText: 'PILIH DARI TANGGAL',
+                              confirmText: 'PILIH',
+                              cancelText: 'BATAL',
+                            );
+                            if (picked != null) {
+                              setModalState(() {
+                                tempStart = picked;
+                                if (tempEnd.isBefore(tempStart)) {
+                                  tempEnd = tempStart;
+                                }
+                              });
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  Border.all(color: const Color(0xFFCBD5E1)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Dari Tanggal',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.event,
+                                        size: 16, color: Color(0xFF2563EB)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _displayDateFormat.format(tempStart),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(Icons.arrow_forward_rounded,
+                          size: 18, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 10),
+                      // Sampai Tanggal
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: tempEnd.isBefore(tempStart)
+                                  ? tempStart
+                                  : tempEnd,
+                              firstDate: tempStart,
+                              lastDate: DateTime.now()
+                                  .add(const Duration(days: 30)),
+                              helpText: 'PILIH SAMPAI TANGGAL',
+                              confirmText: 'PILIH',
+                              cancelText: 'BATAL',
+                            );
+                            if (picked != null) {
+                              setModalState(() {
+                                tempEnd = picked;
+                              });
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  Border.all(color: const Color(0xFFCBD5E1)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Sampai Tanggal',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.event_available,
+                                        size: 16, color: Color(0xFF2563EB)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _displayDateFormat.format(tempEnd),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // SUBMIT / TERAPKAN BUTTON
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _startDate = tempStart;
+                        _endDate = tempEnd;
+                      });
+                      _loadRecapData();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_rounded, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          isSingleDay
+                              ? 'Terapkan Filter (${_displayDateFormat.format(tempStart)})'
+                              : 'Terapkan Filter (${_displayDateFormat.format(tempStart)} - ${_displayDateFormat.format(tempEnd)})',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
+  }
 
-    if (picked != null) {
-      setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
-      });
-      _loadRecapData();
-    }
+  Widget _buildPresetChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF475569),
+          ),
+        ),
+      ),
+    );
   }
 
   List<CheckpointRecapItem> get _filteredCheckpoints {
@@ -371,7 +734,7 @@ class _CheckpointRecapScreenState extends State<CheckpointRecapScreen> {
               Expanded(
                 flex: 6,
                 child: GestureDetector(
-                  onTap: _pickDateRange,
+                  onTap: _showDateFilterModal,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -970,86 +1333,11 @@ class _CheckpointRecapScreenState extends State<CheckpointRecapScreen> {
   }
 
   void _showPhotoDialog(String photoUrl, CheckpointRecapLogItem log) {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  foregroundColor: const Color(0xFF0F172A),
-                  title: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        log.userName,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        log.scannedAt,
-                        style: const TextStyle(
-                            fontSize: 11, color: Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(dialogCtx),
-                    ),
-                  ],
-                ),
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(20)),
-                  child: Image.network(
-                    photoUrl,
-                    fit: BoxFit.contain,
-                    loadingBuilder: (ctx, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        height: 250,
-                        alignment: Alignment.center,
-                        child: const CircularProgressIndicator(
-                            color: Color(0xFF2563EB)),
-                      );
-                    },
-                    errorBuilder: (_, __, ___) {
-                      return Container(
-                        height: 200,
-                        color: const Color(0xFFF1F5F9),
-                        alignment: Alignment.center,
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.broken_image_rounded,
-                                size: 40, color: Color(0xFF94A3B8)),
-                            SizedBox(height: 8),
-                            Text('Gagal memuat foto selfie watermark',
-                                style: TextStyle(
-                                    fontSize: 12, color: Color(0xFF64748B))),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    showAppImagePreviewDialog(
+      context,
+      imageUrl: photoUrl,
+      title: log.userName,
+      subtitle: '${log.scannedAt} • Kondisi: ${log.condition}',
     );
   }
 }
@@ -1275,21 +1563,13 @@ class _LogHistoryCard extends StatelessWidget {
               onTap: () => onPreviewPhoto(log.selfiePhotoUrl!),
               child: Stack(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      log.selfiePhotoUrl!,
-                      width: 52,
-                      height: 52,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 52,
-                        height: 52,
-                        color: const Color(0xFFE2E8F0),
-                        child: const Icon(Icons.image_not_supported_rounded,
-                            size: 20, color: Color(0xFF94A3B8)),
-                      ),
-                    ),
+                  SafeImageView(
+                    imageUrl: log.selfiePhotoUrl,
+                    width: 52,
+                    height: 52,
+                    fit: BoxFit.cover,
+                    borderRadius: 10,
+                    fallbackIcon: Icons.image_not_supported_rounded,
                   ),
                   Positioned(
                     right: 2,

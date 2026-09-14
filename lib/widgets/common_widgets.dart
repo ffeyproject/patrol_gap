@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../config/api_config.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
 /// ===============================================================
@@ -319,4 +324,438 @@ class LoadingButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// ===============================================================
+/// SAFE IMAGE VIEW
+/// ===============================================================
+/// Widget cerdas & tangguh untuk memuat gambar dari berbagai sumber:
+/// 1. Otomatis mencoba berbagai kombinasi URL path dari backend Laravel
+/// 2. Otomatis mencoba tanpa header auth & dengan Bearer token
+/// 3. Data Base64 (data:image/... atau raw base64)
+/// 4. File path lokal di storage HP
+/// 5. Fallback placeholder elegan jika gagal dimuat + tombol salin link
+class SafeImageView extends StatefulWidget {
+  final String? imageUrl;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final double borderRadius;
+  final IconData fallbackIcon;
+  final String? fallbackText;
+  final Map<String, String>? headers;
+  final bool showActionButtons;
+
+  const SafeImageView({
+    super.key,
+    required this.imageUrl,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+    this.borderRadius = 0,
+    this.fallbackIcon = Icons.broken_image_rounded,
+    this.fallbackText,
+    this.headers,
+    this.showActionButtons = false,
+  });
+
+  @override
+  State<SafeImageView> createState() => _SafeImageViewState();
+}
+
+class _SafeImageViewState extends State<SafeImageView> {
+  List<String> _candidates = [];
+  int _candidateIndex = 0;
+  bool _useAuthHeader = false;
+  bool _allFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initCandidates();
+  }
+
+  @override
+  void didUpdateWidget(SafeImageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _initCandidates();
+    }
+  }
+
+  void _initCandidates() {
+    _candidates = ApiConfig.getImageCandidates(widget.imageUrl);
+    _candidateIndex = 0;
+    _useAuthHeader = false;
+    _allFailed = _candidates.isEmpty;
+  }
+
+  void _handleError() {
+    if (!mounted) return;
+
+    // Jika belum coba dengan header autentikasi pada candidate saat ini
+    if (!_useAuthHeader && ApiService.instance.hasToken) {
+      setState(() {
+        _useAuthHeader = true;
+      });
+      return;
+    }
+
+    // Coba kandidat URL berikutnya jika masih ada
+    if (_candidateIndex < _candidates.length - 1) {
+      setState(() {
+        _candidateIndex++;
+        _useAuthHeader = false;
+      });
+    } else {
+      setState(() {
+        _allFailed = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = widget.imageUrl?.trim() ?? '';
+    if (raw.isEmpty || _allFailed || _candidates.isEmpty) {
+      return _buildFallback();
+    }
+
+    final currentTarget = _candidates[_candidateIndex];
+
+    Widget content;
+
+    if (currentTarget.startsWith('data:image') || _isLikelyBase64(currentTarget)) {
+      content = _buildBase64Image(currentTarget);
+    } else if (currentTarget.startsWith('/') && File(currentTarget).existsSync()) {
+      content = Image.file(
+        File(currentTarget),
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+        errorBuilder: (_, __, ___) => _buildFallback(),
+      );
+    } else if (currentTarget.startsWith('http://') || currentTarget.startsWith('https://')) {
+      final imgHeaders = widget.headers ??
+          (_useAuthHeader ? ApiService.instance.imageHeaders : {'Accept': 'image/*, */*'});
+
+      content = Image.network(
+        currentTarget,
+        key: ValueKey('img_${currentTarget}_$_useAuthHeader'),
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+        headers: imgHeaders,
+        loadingBuilder: (ctx, child, progress) {
+          if (progress == null) return child;
+          final total = progress.expectedTotalBytes;
+          final loaded = progress.cumulativeBytesLoaded;
+          final percent = total != null && total > 0 ? (loaded / total) : null;
+
+          return Container(
+            width: widget.width,
+            height: widget.height,
+            color: const Color(0xFFF1F5F9),
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                value: percent,
+                strokeWidth: 2.2,
+                color: const Color(0xFF2563EB),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (ctx, err, stack) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleError();
+          });
+          return Container(
+            width: widget.width,
+            height: widget.height,
+            color: const Color(0xFFF1F5F9),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      content = _buildFallback();
+    }
+
+    if (widget.borderRadius > 0) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        child: content,
+      );
+    }
+
+    return content;
+  }
+
+  bool _isLikelyBase64(String str) {
+    if (str.length < 100) return false;
+    return RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(str.replaceAll('\n', '').replaceAll('\r', ''));
+  }
+
+  Widget _buildBase64Image(String raw) {
+    try {
+      String clean = raw;
+      if (clean.contains(',')) {
+        clean = clean.split(',').last;
+      }
+      clean = clean.replaceAll('\n', '').replaceAll('\r', '').trim();
+      final bytes = base64Decode(clean);
+      return Image.memory(
+        bytes,
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+        errorBuilder: (_, __, ___) => _buildFallback(),
+      );
+    } catch (_) {
+      return _buildFallback();
+    }
+  }
+
+  Widget _buildFallback() {
+    final rawUrl = widget.imageUrl?.trim() ?? '';
+    final resolvedUrl = ApiConfig.resolveImageUrl(rawUrl);
+
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      color: const Color(0xFFF8FAFC),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      alignment: Alignment.center,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(widget.fallbackIcon,
+                size: (widget.width != null && widget.width! < 60) ? 20 : 38,
+                color: const Color(0xFF94A3B8)),
+            const SizedBox(height: 8),
+            Text(
+              widget.fallbackText ?? 'Foto selfie watermark belum tersedia / tidak ditemukan di server.',
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (widget.showActionButtons && resolvedUrl.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: resolvedUrl));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Link foto disalin: $resolvedUrl'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 13),
+                    label: const Text('Salin Link', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _initCandidates();
+                      });
+                    },
+                    icon: const Icon(Icons.refresh_rounded, size: 13),
+                    label: const Text('Coba Lagi', style: TextStyle(fontSize: 11)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Modal Dialog interaktif untuk preview foto selfie watermark / bukti dengan fitur zoom & pan
+void showAppImagePreviewDialog(
+  BuildContext context, {
+  required String? imageUrl,
+  required String title,
+  String? subtitle,
+}) {
+  showDialog(
+    context: context,
+    builder: (dialogCtx) {
+      final screenHeight = MediaQuery.of(dialogCtx).size.height;
+      final screenWidth = MediaQuery.of(dialogCtx).size.width;
+      final isLandscape = screenWidth > screenHeight;
+
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: isLandscape ? 32 : 16,
+          vertical: isLandscape ? 12 : 20,
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: screenHeight * (isLandscape ? 0.94 : 0.85),
+            maxWidth: 640,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. Header Dialog
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDBEAFE),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.verified_user_rounded, color: Color(0xFF2563EB), size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (subtitle != null && subtitle.isNotEmpty) ...[
+                              const SizedBox(height: 1),
+                              Text(
+                                subtitle,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => Navigator.pop(dialogCtx),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 2. Interactive Zoomable Image Area (Flexible agar responsif di layar landscape & tidak overflow)
+                Flexible(
+                  child: Container(
+                    width: double.infinity,
+                    color: const Color(0xFF0F172A),
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      child: Center(
+                        child: SafeImageView(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.contain,
+                          fallbackText: 'Foto selfie watermark belum tersedia atau gagal dimuat dari server.',
+                          fallbackIcon: Icons.broken_image_rounded,
+                          showActionButtons: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 3. Bottom Bar info
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  color: const Color(0xFFF8FAFC),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.pinch_rounded, size: 13, color: Color(0xFF64748B)),
+                          SizedBox(width: 5),
+                          Text(
+                            'Cubit / geser untuk zoom foto',
+                            style: TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
