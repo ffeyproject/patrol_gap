@@ -133,6 +133,44 @@ class _BerandaScreenState extends State<BerandaScreen>
             PatrolSession.fromJson(patrolRes['data'] as Map<String, dynamic>);
       }
 
+      // Fallback jika ada sesi aktif tetapi total checkpoints 0, ambil data site dari jadwal
+      if (activePatrol != null && activePatrol.totalCheckpoints == 0) {
+        try {
+          final schedRes = await ApiService.instance.get('/patrol/my-schedules');
+          if (schedRes['success'] == true &&
+              schedRes['data'] is List &&
+              (schedRes['data'] as List).isNotEmpty) {
+            final list = schedRes['data'] as List;
+            final sched = PatrolSchedule.fromJson(
+                Map<String, dynamic>.from(list.first as Map));
+            final totalCp = sched.site?.checkpointsCount ??
+                sched.site?.checkpoints.length ??
+                0;
+            if (totalCp > 0) {
+              final scannedCp = activePatrol.scannedCount > 0
+                  ? activePatrol.scannedCount
+                  : (sched.site?.checkpoints.where((c) => c.isScanned).length ?? 0);
+              activePatrol = PatrolSession(
+                sessionId: activePatrol.sessionId,
+                scheduleId: activePatrol.scheduleId ?? sched.id,
+                roundNumber: activePatrol.roundNumber,
+                status: activePatrol.status,
+                startedAt: activePatrol.startedAt,
+                completedAt: activePatrol.completedAt,
+                siteName: activePatrol.siteName ?? sched.site?.name,
+                totalCheckpoints: totalCp,
+                scannedCount: scannedCp,
+                remainingCount:
+                    (totalCp - scannedCp) < 0 ? 0 : (totalCp - scannedCp),
+                checkpoints: activePatrol.checkpoints.isNotEmpty
+                    ? activePatrol.checkpoints
+                    : (sched.site?.checkpoints ?? []),
+              );
+            }
+          }
+        } catch (_) {}
+      }
+
       // 3. Insiden
       final incRes = await ApiService.instance.get('/incidents');
       int incidentCount = 0;
@@ -197,19 +235,106 @@ class _BerandaScreenState extends State<BerandaScreen>
   }
 
   Future<void> _openAbsensi() async {
-    final res = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => AbsensiScreen(user: widget.user)),
     );
-    if (res == true && mounted) _loadDashboardData();
+    if (mounted) _loadDashboardData();
   }
 
   Future<void> _openPatroli() async {
-    final res = await Navigator.push(
+    final bool isCheckedIn =
+        _attendance?.isCheckedIn == true && _attendance?.isCheckedOut != true;
+
+    if (!isCheckedIn) {
+      final bool isCheckedOut = _attendance?.isCheckedOut == true;
+      final bool? proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          backgroundColor: Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.lock_clock_rounded,
+                  color: Color(0xFFD97706),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  isCheckedOut
+                      ? 'Shift Telah Selesai'
+                      : 'Presensi Shift Diperlukan',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            isCheckedOut
+                ? 'Anda telah melakukan Check-Out presensi shift hari ini. Scan barcode checkpoint dinonaktifkan di luar jam kerja aktif.'
+                : 'Anda belum melakukan Check-In kehadiran shift kerja. Petugas wajib Check-In terlebih dahulu untuk dapat memulai sesi patroli atau memindai barcode checkpoint.',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF475569),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text(
+                'Lihat Rute Patroli',
+                style: TextStyle(
+                    color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (!isCheckedOut)
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx, false);
+                  _openAbsensi();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.fingerprint_rounded, size: 18),
+                label: const Text(
+                  'Presensi Masuk',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
+        ),
+      );
+
+      if (proceed != true || !mounted) return;
+    }
+
+    if (!mounted) return;
+
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => PatroliScreen(user: widget.user)),
     );
-    if (res == true && mounted) _loadDashboardData();
+    if (mounted) _loadDashboardData();
   }
 
   @override

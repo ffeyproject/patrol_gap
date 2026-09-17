@@ -3,6 +3,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/offline_service.dart';
 import '../services/session_service.dart';
+import 'absensi_screen.dart';
 import 'qr_scan_screen.dart';
 
 class PatroliScreen extends StatefulWidget {
@@ -20,12 +21,16 @@ class PatroliScreen extends StatefulWidget {
 class _PatroliScreenState extends State<PatroliScreen> {
   PatrolSchedule? _schedule;
   PatrolSession? _activeSession;
+  AttendanceStatus? _attendance;
   List<CheckpointModel> _checkpoints = [];
 
   bool _loading = true;
   bool _syncing = false;
   int _pendingSync = 0;
   String? _errorMessage;
+
+  bool get _isCheckedIn =>
+      _attendance?.isCheckedIn == true && _attendance?.isCheckedOut != true;
 
   @override
   void initState() {
@@ -37,6 +42,15 @@ class _PatroliScreenState extends State<PatroliScreen> {
     if (mounted) setState(() => _loading = true);
 
     try {
+      // 0. Ambil Status Presensi (Wajib Check-In)
+      AttendanceStatus? attendance;
+      try {
+        final attRes = await ApiService.instance.get('/attendance/status');
+        if (attRes['success'] == true && attRes['data'] != null) {
+          attendance = AttendanceStatus.fromJson(attRes);
+        }
+      } catch (_) {}
+
       // 1. Ambil Sesi Aktif
       final activeRes = await ApiService.instance.get('/patrol/session/active');
 
@@ -62,10 +76,30 @@ class _PatroliScreenState extends State<PatroliScreen> {
         schedule =
             PatrolSchedule.fromJson(Map<String, dynamic>.from(list.first as Map));
 
-        // Jika belum ada sesi aktif, tampilkan daftar checkpoint dari site jadwal
-        if (activeSession == null && schedule.site != null) {
+        // Jika checkpoints belum ada atau sesi aktif tidak menyertakan checkpoint, gunakan dari jadwal site
+        if (checkpoints.isEmpty && schedule.site != null) {
           checkpoints = schedule.site!.checkpoints;
           await SessionService.instance.setActiveSiteId(schedule.siteId);
+        }
+
+        if (activeSession != null &&
+            activeSession.totalCheckpoints == 0 &&
+            checkpoints.isNotEmpty) {
+          final totalCp = schedule.site?.checkpointsCount ?? checkpoints.length;
+          final scannedCp = checkpoints.where((c) => c.isScanned).length;
+          activeSession = PatrolSession(
+            sessionId: activeSession.sessionId,
+            scheduleId: activeSession.scheduleId ?? schedule.id,
+            roundNumber: activeSession.roundNumber,
+            status: activeSession.status,
+            startedAt: activeSession.startedAt,
+            completedAt: activeSession.completedAt,
+            siteName: activeSession.siteName ?? schedule.site?.name,
+            totalCheckpoints: totalCp,
+            scannedCount: scannedCp,
+            remainingCount: (totalCp - scannedCp) < 0 ? 0 : (totalCp - scannedCp),
+            checkpoints: checkpoints,
+          );
         }
       }
 
@@ -75,6 +109,7 @@ class _PatroliScreenState extends State<PatroliScreen> {
 
       setState(() {
         _loading = false;
+        _attendance = attendance;
         _activeSession = activeSession;
         _schedule = schedule;
         _checkpoints = checkpoints;
@@ -90,7 +125,100 @@ class _PatroliScreenState extends State<PatroliScreen> {
     }
   }
 
+  Future<void> _showCheckInRequiredDialog() async {
+    final bool isCheckedOut = _attendance?.isCheckedOut == true;
+    final title = isCheckedOut
+        ? 'Shift Sudah Selesai (Check-Out)'
+        : 'Presensi Shift Diperlukan';
+    final desc = isCheckedOut
+        ? 'Anda telah melakukan Check-Out presensi shift hari ini. Anda tidak dapat melakukan scan patroli di luar jam shift aktif.'
+        : 'Anda belum melakukan Check-In shift kerja. Silakan lakukan Presensi Masuk (Check-In) terlebih dahulu untuk mulai memindai checkpoint patroli.';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFD97706),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          desc,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Tutup',
+              style: TextStyle(
+                  color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (!isCheckedOut)
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AbsensiScreen(user: widget.user),
+                  ),
+                );
+                if (mounted) _loadData();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.fingerprint_rounded, size: 18),
+              label: const Text(
+                'Check-In Sekarang',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _startRoundDialog() async {
+    if (!_isCheckedIn) {
+      await _showCheckInRequiredDialog();
+      return;
+    }
+
     int selectedRound = 1;
     final notesCtrl =
         TextEditingController(text: 'Memulai patroli round area site');
@@ -399,6 +527,11 @@ class _PatroliScreenState extends State<PatroliScreen> {
   }
 
   Future<void> _scanQr() async {
+    if (!_isCheckedIn) {
+      await _showCheckInRequiredDialog();
+      return;
+    }
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -473,13 +606,22 @@ class _PatroliScreenState extends State<PatroliScreen> {
           ? null
           : FloatingActionButton.extended(
               onPressed: _scanQr,
-              backgroundColor: const Color(0xFF059669),
+              backgroundColor: _isCheckedIn
+                  ? const Color(0xFF059669)
+                  : const Color(0xFF64748B),
               foregroundColor: Colors.white,
               elevation: 4,
-              icon: const Icon(Icons.qr_code_scanner_rounded),
-              label: const Text(
-                'Pindai QR Checkpoint',
-                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.3),
+              icon: Icon(
+                _isCheckedIn
+                    ? Icons.qr_code_scanner_rounded
+                    : Icons.lock_clock_rounded,
+              ),
+              label: Text(
+                _isCheckedIn
+                    ? 'Pindai QR Checkpoint'
+                    : 'Wajib Check-In Shift',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w900, letterSpacing: 0.3),
               ),
             ),
       body: RefreshIndicator(
@@ -520,6 +662,9 @@ class _PatroliScreenState extends State<PatroliScreen> {
                       ),
                     ),
                   ],
+
+                  // Peringatan Check-In jika belum presensi
+                  if (!_isCheckedIn) _buildCheckInWarningCard(),
 
                   // 1. Shift Schedule Card
                   _buildShiftScheduleCard(),
@@ -597,6 +742,104 @@ class _PatroliScreenState extends State<PatroliScreen> {
                     }),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildCheckInWarningCard() {
+    final bool isCheckedOut = _attendance?.isCheckedOut == true;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.lock_clock_rounded,
+              color: Color(0xFFD97706),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isCheckedOut
+                      ? 'Shift Selesai (Sudah Check-Out)'
+                      : 'Wajib Presensi Check-In',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  isCheckedOut
+                      ? 'Anda telah checkout shift. Scan patroli dinonaktifkan di luar jam kerja aktif.'
+                      : 'Lakukan Check-In kehadiran shift sebelum memulai sesi atau scan barcode checkpoint.',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFFB45309),
+                    height: 1.3,
+                  ),
+                ),
+                if (!isCheckedOut) ...[
+                  const SizedBox(height: 9),
+                  InkWell(
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AbsensiScreen(user: widget.user),
+                        ),
+                      );
+                      if (mounted) _loadData();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 11, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.fingerprint_rounded,
+                              size: 15, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text(
+                            'Check-In Presensi Sekarang',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

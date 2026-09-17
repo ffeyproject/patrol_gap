@@ -1,7 +1,7 @@
 name: patroli_security_app
 description: Aplikasi Mobile Security & Patroli Real-Time (Face Recognition, GPS, QR Checkpoint)
 publish_to: "none"
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

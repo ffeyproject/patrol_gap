@@ -331,21 +331,58 @@ class PatrolSession {
           .toList();
     }
 
-    final total = int.tryParse(json['total_checkpoints']?.toString() ?? '0') ?? cpList.length;
-    final scanned = int.tryParse(json['scanned_count']?.toString() ?? '0') ??
+    int total = int.tryParse(
+          json['total_checkpoints']?.toString() ??
+              json['totalCheckpoints']?.toString() ??
+              json['checkpoints_count']?.toString() ??
+              json['total_points']?.toString() ??
+              json['total']?.toString() ??
+              '',
+        ) ??
+        cpList.length;
+    if (total == 0 && cpList.isNotEmpty) {
+      total = cpList.length;
+    }
+
+    int scanned = int.tryParse(
+          json['scanned_count']?.toString() ??
+              json['scannedCount']?.toString() ??
+              json['scanned_checkpoints']?.toString() ??
+              json['points_scanned']?.toString() ??
+              json['scanned']?.toString() ??
+              '',
+        ) ??
         cpList.where((c) => c.isScanned).length;
+    if (scanned == 0 && cpList.isNotEmpty) {
+      scanned = cpList.where((c) => c.isScanned).length;
+    }
+
+    final site = json['site_name']?.toString() ??
+        json['siteName']?.toString() ??
+        json['site']?['name']?.toString();
 
     return PatrolSession(
-      sessionId: int.tryParse(json['session_id']?.toString() ?? json['id']?.toString() ?? '0') ?? 0,
-      scheduleId: int.tryParse(json['patrol_schedule_id']?.toString() ?? ''),
-      roundNumber: int.tryParse(json['round_number']?.toString() ?? '1') ?? 1,
+      sessionId: int.tryParse(json['session_id']?.toString() ??
+              json['sessionId']?.toString() ??
+              json['id']?.toString() ??
+              '0') ??
+          0,
+      scheduleId: int.tryParse(json['patrol_schedule_id']?.toString() ??
+          json['schedule_id']?.toString() ??
+          ''),
+      roundNumber: int.tryParse(json['round_number']?.toString() ??
+              json['roundNumber']?.toString() ??
+              json['round']?.toString() ??
+              '1') ??
+          1,
       status: json['status']?.toString() ?? 'in_progress',
-      startedAt: json['started_at']?.toString(),
-      completedAt: json['completed_at']?.toString(),
-      siteName: json['site_name']?.toString(),
+      startedAt: json['started_at']?.toString() ?? json['startedAt']?.toString(),
+      completedAt:
+          json['completed_at']?.toString() ?? json['completedAt']?.toString(),
+      siteName: site,
       totalCheckpoints: total,
       scannedCount: scanned,
-      remainingCount: total - scanned,
+      remainingCount: (total - scanned) < 0 ? 0 : (total - scanned),
       checkpoints: cpList,
     );
   }

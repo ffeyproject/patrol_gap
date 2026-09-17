@@ -1,8 +1,8 @@
 {
-  "version": "1.0.2",
-  "version_code": 3,
-  "apk_url": "https://apk.produksionline.xyz/files/Patroli_GAP_v1.0.2.apk",
-  "changelog": "• Default alamat API diatur ke https://patroli.portalgapsoft.xyz\n• Pembaruan pemilih filter tanggal rekap laporan checkpoint yang interaktif\n• Pilihan cepat rentang tanggal (Hari ini, Kemarin, 7 Hari, Bulan Ini)\n• Peningkatan kestabilan koneksi dan performa aplikasi",
+  "version": "1.0.3",
+  "version_code": 4,
+  "apk_url": "https://apk.produksionline.xyz/files/Patroli_GAP_v1.0.3.apk",
+  "changelog": "• Wajib presensi check-in shift sebelum scan checkpoint & patroli\n• Perbaikan kalkulasi persentase dan progress counter checkpoint\n• Peningkatan auto-refresh dashboard beranda dan performa aplikasi",
   "force_update": false,
   "file_size": "102 MB"
 }
