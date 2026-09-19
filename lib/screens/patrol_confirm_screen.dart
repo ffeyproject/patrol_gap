@@ -94,6 +94,11 @@ class _PatrolConfirmScreenState extends State<PatrolConfirmScreen> {
   }
 
   Future<void> _submitScan() async {
+    if (widget.activeSessionId == null) {
+      setState(() => _error = 'Sesi patroli aktif tidak ditemukan. Silakan tekan "Mulai Ronde" terlebih dahulu di menu patroli.');
+      return;
+    }
+
     if (_photo == null) {
       setState(() => _error = 'Foto selfie petugas di depan checkpoint wajib dilampirkan.');
       return;
@@ -106,7 +111,7 @@ class _PatrolConfirmScreenState extends State<PatrolConfirmScreen> {
 
     try {
       final pos = await LocationService.instance.getCurrentPosition();
-      final sessionId = widget.activeSessionId ?? 1;
+      final sessionId = widget.activeSessionId!;
 
       final hasConnection = await OfflineService.instance.hasConnection();
 
@@ -155,13 +160,24 @@ class _PatrolConfirmScreenState extends State<PatrolConfirmScreen> {
       if (!mounted) return;
 
       if (res['success'] == true) {
-        final data = res['data'];
-        final cpName = data?['checkpoint_name'] ?? widget.qrToken;
+        final data = res['data'] is Map ? (res['data'] as Map<String, dynamic>) : null;
+        final cpName = data?['checkpoint_name'] ?? widget.checkpoint?.name ?? widget.qrToken;
         final dist = data?['distance_meters'] != null ? '${data!['distance_meters']} meter' : '';
+        final isAllDone = data?['is_all_scanned'] == true;
+        final nextCp = data?['next_checkpoint'] is Map ? (data!['next_checkpoint'] as Map) : null;
+
+        String nextInfo = '';
+        if (isAllDone) {
+          nextInfo = '\n\n🎉 Seluruh titik checkpoint telah selesai diverifikasi! Anda dapat menyelesaikan ronde.';
+        } else if (nextCp != null) {
+          final nName = nextCp['name'] ?? 'Titik Berikutnya';
+          final nIdx = nextCp['order_index']?.toString() ?? '';
+          nextInfo = '\n\n🎯 Target Selanjutnya: Titik ${nIdx.isNotEmpty ? '#$nIdx ' : ''}$nName';
+        }
 
         _showResultDialog(
           title: 'Scan Berhasil Terverifikasi',
-          message: "Checkpoint '$cpName' berhasil diverifikasi! ${dist.isNotEmpty ? '\nJarak ke titik: $dist' : ''}",
+          message: "Checkpoint '$cpName' berhasil diverifikasi! ${dist.isNotEmpty ? '\nJarak ke titik: $dist' : ''}$nextInfo",
           isSuccess: true,
         );
       } else {

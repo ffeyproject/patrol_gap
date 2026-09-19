@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../config/api_config.dart';
 import '../theme/app_theme.dart';
 
@@ -285,17 +286,39 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     super.dispose();
   }
 
-  void _startUpdate() {
+  Future<void> _startUpdate() async {
     if (_isDownloading) return;
 
     setState(() {
       _isDownloading = true;
       _progress = 0;
       _errorMessage = null;
-      _statusText = 'Menghubungkan ke server...';
+      _statusText = 'Memeriksa izin instalasi...';
     });
 
     try {
+      // 1. Periksa dan minta izin REQUEST_INSTALL_PACKAGES agar Android tidak membatalkan update
+      final status = await Permission.requestInstallPackages.status;
+      if (!status.isGranted) {
+        final req = await Permission.requestInstallPackages.request();
+        if (!req.isGranted) {
+          if (!mounted) return;
+          setState(() {
+            _isDownloading = false;
+            _errorMessage =
+                'Izin instalasi aplikasi diperlukan. Silakan aktifkan opsi "Izinkan dari sumber ini" pada pengaturan aplikasi.';
+          });
+          await openAppSettings();
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _statusText = 'Menghubungkan ke server...';
+      });
+
       final cleanUrl = widget.updateInfo.apkUrl.trim();
       final destinationName = 'Patroli_GAP_v${widget.updateInfo.version}.apk';
 
@@ -319,7 +342,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             case OtaStatus.INSTALLING:
               setState(() {
                 _progress = 100;
-                _statusText = 'Membuka instalasi APK...';
+                _statusText = 'Silakan tekan "Update" pada layar instalasi...';
               });
               break;
             case OtaStatus.ALREADY_RUNNING_ERROR:

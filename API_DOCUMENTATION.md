@@ -49,6 +49,22 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
         }
     }
     ```
+- **Response Error Password Salah (`401 Unauthorized`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Kredensial login tidak valid. Sisa percobaan: 3 kali sebelum terkunci sementara.",
+        "remaining_attempts": 3
+    }
+    ```
+- **Response Rate Limiting > 5 Percobaan Gagal (`429 Too Many Requests`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Terlalu banyak percobaan login gagal. Akun/IP dibatasi sementara, silakan coba lagi dalam 54 detik.",
+        "retry_after_seconds": 54
+    }
+    ```
 
 ### 1.2 Get User Profile
 
@@ -160,7 +176,7 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
 
 - **Endpoint**: `GET /patrol/my-schedules`
 - **Auth**: Bearer Token
-- **Deskripsi**: Mengambil daftar shift yang ditugaskan kepada satpam ini beserta daftar checkpoint site tersebut.
+- **Deskripsi**: Mengambil daftar shift yang ditugaskan kepada satpam yang sedang login (atau seluruh jadwal aktif jika role `danru` / `admin` / `superadmin`). Otomatis dilengkapi deteksi shift aktif (`is_current_shift`), status sesi ronde berjalan (`has_active_session`), jumlah ronde yang selesai hari ini (`completed_rounds_count`), dan diurutkan dengan shift yang sedang aktif di urutan pertama.
 - **Response Success (`200 OK`)**:
     ```json
     {
@@ -173,6 +189,13 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
                 "start_time": "07:00:00",
                 "end_time": "15:00:00",
                 "min_patrol_rounds": 3,
+                "is_active": true,
+                "is_current_shift": true,
+                "has_active_session": true,
+                "active_session_id": 12,
+                "active_round_number": 1,
+                "completed_rounds_count": 0,
+                "total_checkpoints": 6,
                 "site": {
                     "id": 1,
                     "name": "Site Gedung Menara Utama",
@@ -187,7 +210,9 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
                             "qr_token": "CP-GB-UTAMA-01",
                             "latitude": -6.2297465,
                             "longitude": 106.829518,
-                            "max_radius_meters": 10
+                            "max_radius_meters": 10,
+                            "order_index": 1,
+                            "is_active": true
                         },
                         {
                             "id": 2,
@@ -196,7 +221,9 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
                             "qr_token": "CP-LB-UTAMA-02",
                             "latitude": -6.2298,
                             "longitude": 106.8296,
-                            "max_radius_meters": 10
+                            "max_radius_meters": 10,
+                            "order_index": 2,
+                            "is_active": true
                         }
                     ]
                 }
@@ -209,11 +236,14 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
 
 - **Endpoint**: `POST /patrol/session/start`
 - **Auth**: Bearer Token
+- **Deskripsi**: Memulai sesi ronde patroli baru untuk jadwal shift yang dipilih.
+  - **Otomatisasi Ronde Berurutan**: Nomor ronde (`round_number`) dihitung otomatis secara berurutan per jadwal shift hari ini (Round 1, Round 2, Round 3, dst.).
+  - **Izin Shift Petugas**: Hanya satpam yang ditugaskan pada jadwal shift tersebut (atau `danru` / `admin`) yang dapat memulai sesi.
+  - **Proteksi Sesi Aktif**: Jika sudah ada sesi aktif untuk shift ini (misal dimulai rekan satu shift), sistem mengembalikan data sesi aktif tersebut agar dapat langsung dilanjutkan tanpa membuat duplikasi ronde.
 - **Request Body (JSON)**:
     ```json
     {
         "patrol_schedule_id": 1,
-        "round_number": 1,
         "notes": "Memulai patroli round 1 lantai basement & lobby"
     }
     ```
@@ -221,36 +251,36 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
     ```json
     {
         "success": true,
-        "message": "Sesi Patroli Round 1 berhasil dimulai. Silakan scan titik lokasi.",
+        "message": "Sesi Patroli Round 1 (Shift Pagi (07:00 - 15:00)) berhasil dimulai. Silakan scan titik lokasi.",
         "data": {
-            "session_id": 2,
-            "round_number": 1,
-            "started_at": "07:15:00",
-            "status": "in_progress",
-            "total_checkpoints": 6,
-            "scanned_count": 0,
-            "remaining_count": 6
-        }
-    }
-    ```
-
-### 3.3 Ambil Sesi Patroli Aktif & Checklist Checkpoint
-
-- **Endpoint**: `GET /patrol/session/active`
-- **Auth**: Bearer Token
-- **Response Success (`200 OK`)**:
-    ```json
-    {
-        "success": true,
-        "data": {
-            "session_id": 2,
+            "session_id": 12,
             "round_number": 1,
             "status": "in_progress",
-            "started_at": "07:15:00",
-            "site_name": "Site Gedung Menara Utama",
-            "total_checkpoints": 6,
-            "scanned_count": 1,
-            "remaining_count": 5,
+            "started_at": "2026-09-19 07:15:00",
+            "completed_at": null,
+            "schedule": {
+                "id": 1,
+                "shift_name": "Shift Pagi (07:00 - 15:00)",
+                "start_time": "07:00:00",
+                "end_time": "15:00:00",
+                "min_patrol_rounds": 3
+            },
+            "site": {
+                "id": 1,
+                "name": "Site Gedung Menara Utama",
+                "code": "SITE-MK"
+            },
+            "user": {
+                "id": 3,
+                "name": "Agus Pratama",
+                "badge_number": "SEC-002"
+            },
+            "progress": {
+                "total_checkpoints": 6,
+                "scanned_count": 0,
+                "percentage": 0,
+                "is_all_scanned": false
+            },
             "checkpoints": [
                 {
                     "id": 1,
@@ -259,11 +289,77 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
                     "qr_token": "CP-GB-UTAMA-01",
                     "latitude": -6.2297465,
                     "longitude": 106.829518,
+                    "max_radius_meters": 10,
+                    "order_index": 1,
+                    "is_scanned": false,
+                    "scanned_at": null,
+                    "selfie_photo": null,
+                    "distance_meters": null
+                }
+            ]
+        }
+    }
+    ```
+- **Response Error Tidak Terdaftar di Shift (`403 Forbidden`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Akses ditolak! Anda tidak memiliki jadwal penugasan patroli pada shift ini."
+    }
+    ```
+
+### 3.3 Ambil Sesi Patroli Aktif & Checklist Checkpoint
+
+- **Endpoint**: `GET /patrol/session/active`
+- **Auth**: Bearer Token
+- **Deskripsi**: Mengambil sesi patroli yang sedang berjalan (`status: "in_progress"`) milik satpam yang login atau sesi pada shift yang ditugaskan kepadanya (multi-guard shift sharing).
+- **Response Success (`200 OK`)**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "session_id": 12,
+            "round_number": 1,
+            "status": "in_progress",
+            "started_at": "2026-09-19 07:15:00",
+            "completed_at": null,
+            "schedule": {
+                "id": 1,
+                "shift_name": "Shift Pagi (07:00 - 15:00)",
+                "start_time": "07:00:00",
+                "end_time": "15:00:00",
+                "min_patrol_rounds": 3
+            },
+            "site": {
+                "id": 1,
+                "name": "Site Gedung Menara Utama",
+                "code": "SITE-MK"
+            },
+            "user": {
+                "id": 3,
+                "name": "Agus Pratama",
+                "badge_number": "SEC-002"
+            },
+            "progress": {
+                "total_checkpoints": 6,
+                "scanned_count": 1,
+                "percentage": 17,
+                "is_all_scanned": false
+            },
+            "checkpoints": [
+                {
+                    "id": 1,
+                    "name": "Pos Jaga Gerbang Utama",
+                    "code": "CP-01",
+                    "qr_token": "CP-GB-UTAMA-01",
+                    "latitude": -6.2297465,
+                    "longitude": 106.829518,
+                    "max_radius_meters": 10,
+                    "order_index": 1,
                     "is_scanned": true,
-                    "scanned_at": "07:18:22 WIB",
-                    "distance_meters": 1.4,
-                    "condition_status": "normal",
-                    "selfie_url": "http://10.0.2.2:8000/storage/patrol_selfies/watermarked_xxx.jpg"
+                    "scanned_at": "07:18:22",
+                    "selfie_photo": "http://10.0.2.2:8000/storage/patrol_selfies/watermarked_xxx.jpg",
+                    "distance_meters": 1.4
                 },
                 {
                     "id": 2,
@@ -272,19 +368,33 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
                     "qr_token": "CP-LB-UTAMA-02",
                     "latitude": -6.2298,
                     "longitude": 106.8296,
+                    "max_radius_meters": 10,
+                    "order_index": 2,
                     "is_scanned": false,
-                    "scanned_at": null
+                    "scanned_at": null,
+                    "selfie_photo": null,
+                    "distance_meters": null
                 }
             ]
         }
     }
     ```
+- **Response Jika Tidak Ada Sesi Aktif (`200 OK`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Tidak ada sesi patroli aktif saat ini.",
+        "data": null
+    }
+    ```
 
-### 3.4 Scan QR Checkpoint (Core Engine: Geofencing & Watermark)
+### 3.4 Scan QR Checkpoint (Geofencing & Watermark)
 
 - **Endpoint**: `POST /patrol/scan`
 - **Auth**: Bearer Token
 - **Content-Type**: `multipart/form-data`
+- **Hak Akses**: Satpam pembuat sesi, atau seluruh satpam yang ditugaskan pada shift yang sama, atau role `danru` / `admin`.
+- **Aturan Urutan Scan (Sequential Scan)**: Titik checkpoint **wajib discan sesuai urutan** (`order_index` 1, 2, 3, dst.). Satpam tidak dapat melompati atau mengacak titik checkpoint.
 - **Form Fields**:
   | Field | Tipe | Deskripsi |
   | :--- | :--- | :--- |
@@ -293,25 +403,58 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
   | `latitude` | `double` | Latitude GPS satpam saat scan (misal: `-6.2297465`) |
   | `longitude` | `double` | Longitude GPS satpam saat scan (misal: `106.8295180`) |
   | `selfie_photo` | `File / Image` | Foto selfie satpam di depan titik checkpoint |
-  | `condition_status` | `string` | Pilihan: `"normal"`, `"warning"`, atau `"danger"` |
-  | `notes` | `string` | Catatan temuan kondisi fisik di titik checkpoint |
+  | `condition_status` | `string` *(Opsional)* | Pilihan: `"normal"` (default), `"warning"`, atau `"danger"` |
+  | `notes` | `string` *(Opsional)* | Catatan kondisi fisik di titik checkpoint |
 
 - **Response Success (`200 OK`)**:
-
     ```json
     {
         "success": true,
-        "message": "Checkpoint 'Pos Jaga Gerbang Utama' berhasil discan dan diverifikasi.",
+        "message": "Titik [Pos Jaga Gerbang Utama] berhasil discan! Jarak: 1.8m.",
         "data": {
-            "log_id": 14,
-            "checkpoint_name": "Pos Jaga Gerbang Utama",
+            "log": {
+                "id": 14,
+                "patrol_session_id": 12,
+                "checkpoint_id": 1,
+                "user_id": 3,
+                "scanned_at": "2026-09-19T07:18:22.000000Z",
+                "selfie_photo_path": "storage/patrol_selfies/watermark_1725700000.jpg",
+                "latitude": -6.2297465,
+                "longitude": 106.829518,
+                "distance_meters": 1.8,
+                "is_valid_location": true,
+                "condition_status": "normal",
+                "notes": null,
+                "checkpoint": {
+                    "id": 1,
+                    "name": "Pos Jaga Gerbang Utama",
+                    "code": "CP-01"
+                }
+            },
             "distance_meters": 1.8,
-            "scanned_at": "07:18:22 WIB",
-            "selfie_photo_url": "http://10.0.2.2:8000/storage/patrol_selfies/watermark_1725700000.jpg",
-            "condition_status": "normal",
-            "scanned_count": 1,
+            "scanned_checkpoints": 1,
             "total_checkpoints": 6,
-            "is_round_complete": false
+            "is_all_scanned": false,
+            "next_checkpoint": {
+                "id": 2,
+                "name": "Lobby Utama & Resepsionis",
+                "code": "CP-02",
+                "order_index": 2
+            }
+        }
+    }
+    ```
+
+- **Response Error Urutan Scan Salah (`422 Unprocessable Content`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Urutan scan tidak sesuai! Anda harus scan titik ke-1 [Pos Jaga Gerbang Utama] terlebih dahulu sebelum titik ke-2 [Lobby Utama & Resepsionis].",
+        "expected_checkpoint": {
+            "id": 1,
+            "name": "Pos Jaga Gerbang Utama",
+            "code": "CP-01",
+            "order_index": 1
         }
     }
     ```
@@ -327,27 +470,84 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
     }
     ```
 
+- **Response Error Bukan Pemilik/Bukan Shift Anda (`403 Forbidden`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Sesi patroli ini bukan milik akun Anda dan Anda tidak ditugaskan pada jadwal shift ini."
+    }
+    ```
+
 ### 3.5 Selesaikan Ronde Patroli
 
 - **Endpoint**: `POST /patrol/session/finish`
 - **Auth**: Bearer Token
+- **Deskripsi**: Menyelesaikan sesi ronde patroli yang sedang berjalan.
+  - **Validasi Kelengkapan Titik**: Secara default seluruh titik checkpoint aktif pada site tersebut wajib discan (`scanned_checkpoints == total_checkpoints`) sebelum ronde dapat diselesaikan.
+  - **Parameter Force**: Parameter `force: true` dapat digunakan (khusus kondisi darurat atau role Danru/Admin) untuk memaksa penyelesaian ronde meski belum semua titik discan.
 - **Request Body (JSON)**:
     ```json
     {
-        "patrol_session_id": 2,
-        "notes": "Ronde 1 selesai, seluruh pintu darurat dan server terkunci rapat."
+        "patrol_session_id": 12,
+        "notes": "Ronde 1 selesai, seluruh pintu darurat dan server terkunci rapat.",
+        "force": false
     }
     ```
 - **Response Success (`200 OK`)**:
     ```json
     {
         "success": true,
-        "message": "Sesi patroli round 1 telah berhasil diselesaikan.",
+        "message": "Sesi Patroli Round 1 selesai (6/6 titik). Terima kasih!",
         "data": {
-            "session_id": 2,
+            "session_id": 12,
+            "round_number": 1,
             "status": "completed",
-            "completed_at": "07:45:00"
+            "started_at": "2026-09-19 07:15:00",
+            "completed_at": "2026-09-19 07:45:00",
+            "schedule": {
+                "id": 1,
+                "shift_name": "Shift Pagi (07:00 - 15:00)",
+                "start_time": "07:00:00",
+                "end_time": "15:00:00",
+                "min_patrol_rounds": 3
+            },
+            "site": {
+                "id": 1,
+                "name": "Site Gedung Menara Utama",
+                "code": "SITE-MK"
+            },
+            "user": {
+                "id": 3,
+                "name": "Agus Pratama",
+                "badge_number": "SEC-002"
+            },
+            "progress": {
+                "total_checkpoints": 6,
+                "scanned_count": 6,
+                "percentage": 100,
+                "is_all_scanned": true
+            },
+            "checkpoints": [ ... ]
         }
+    }
+    ```
+- **Response Error Titik Belum Lengkap Discan (`422 Unprocessable Content`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Ronde 1 belum selesai! Baru 4 dari 6 titik checkpoint yang discan. Silakan scan semua titik sebelum mengakhiri ronde.",
+        "data": {
+            "scanned_count": 4,
+            "total_checkpoints": 6,
+            "missing_count": 2
+        }
+    }
+    ```
+- **Response Error Bukan Pemilik/Bukan Shift Anda (`403 Forbidden`)**:
+    ```json
+    {
+        "success": false,
+        "message": "Unauthorized. Sesi patroli bukan milik akun Anda dan Anda tidak terdaftar pada jadwal shift ini."
     }
     ```
 
@@ -357,56 +557,47 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
 - **Auth**: Bearer Token
 - **Query Params**:
   - `site_id` *(Opsional)*: Filter berdasarkan ID Site/Lokasi
-  - `start_date` *(Opsional, format: `YYYY-MM-DD`)*: Tanggal awal filter (Default: hari ini)
-  - `end_date` *(Opsional, format: `YYYY-MM-DD`)*: Tanggal akhir filter (Default: hari ini)
+  - `start_date` *(Opsional, format: `YYYY-MM-DD`)*: Tanggal awal filter
+  - `end_date` *(Opsional, format: `YYYY-MM-DD`)*: Tanggal akhir filter
 - **Response Success (`200 OK`)**:
     ```json
     {
         "success": true,
-        "filters": {
-            "site_id": 1,
-            "start_date": "2026-09-09",
-            "end_date": "2026-09-09"
-        },
-        "metrics": {
-            "total_checkpoints": 8,
-            "scanned_checkpoints_count": 6,
-            "unscanned_checkpoints_count": 2,
-            "total_scan_events": 24,
-            "total_incident_reports": 1
-        },
-        "data": [
-            {
-                "id": 1,
-                "site_id": 1,
-                "site_name": "Site Gedung Menara Utama",
-                "name": "Pos Jaga Gerbang Utama",
-                "code": "CP-01",
-                "qr_token": "CP-GB-UTAMA-01",
-                "latitude": -6.2297465,
-                "longitude": 106.829518,
-                "max_radius_meters": 10,
-                "total_scans": 4,
-                "incident_scans": 0,
-                "normal_scans": 4,
-                "avg_distance": 2.1,
-                "last_scanned_at": "09/09/2026 14:15 WIB",
-                "recent_logs": [
-                    {
-                        "id": 42,
-                        "patrol_session_id": 10,
-                        "round_number": 2,
-                        "guard_name": "Agus Pratama",
-                        "guard_badge": "SEC-002",
-                        "distance_meters": 1.8,
-                        "condition_status": "normal",
-                        "notes": "Aman terkendali",
-                        "selfie_photo_url": "http://10.0.2.2:8000/storage/patrol_selfies/watermark_1725700000.jpg",
-                        "scanned_at": "09/09/2026 14:15:20 WIB"
-                    }
-                ]
-            }
-        ]
+        "data": {
+            "summary": {
+                "total_checkpoints": 8,
+                "total_scans": 24
+            },
+            "checkpoints": [
+                {
+                    "id": 1,
+                    "name": "Pos Jaga Gerbang Utama",
+                    "code": "CP-01",
+                    "site_id": 1,
+                    "site_name": "Site Gedung Menara Utama",
+                    "max_radius_meters": 10,
+                    "order_index": 1,
+                    "is_active": true,
+                    "total_scans": 4,
+                    "avg_distance_meters": 2.1,
+                    "last_scanned_at": "19 Sep 2026, 14:15",
+                    "last_guard_name": "Agus Pratama",
+                    "last_condition_status": "normal",
+                    "recent_logs": [
+                        {
+                            "id": 42,
+                            "scanned_at": "19 Sep 2026, 14:15:20",
+                            "guard_name": "Agus Pratama",
+                            "guard_badge": "SEC-002",
+                            "distance_meters": 1.8,
+                            "condition_status": "normal",
+                            "selfie_photo_url": "http://10.0.2.2:8000/storage/patrol_selfies/watermark_1725700000.jpg",
+                            "notes": "Aman terkendali"
+                        }
+                    ]
+                }
+            ]
+        }
     }
     ```
 
@@ -763,7 +954,31 @@ class PatroliApiService {
     return response.data;
   }
 
-  // 2. Scan QR Checkpoint
+  // 2. Ambil Jadwal Shift Satpam
+  Future<Map<String, dynamic>> getMySchedules() async {
+    final response = await _dio.get('/patrol/my-schedules');
+    return response.data;
+  }
+
+  // 3. Mulai Sesi Ronde Patroli
+  Future<Map<String, dynamic>> startPatrolSession({
+    required int scheduleId,
+    String? notes,
+  }) async {
+    final response = await _dio.post('/patrol/session/start', data: {
+      'patrol_schedule_id': scheduleId,
+      'notes': notes,
+    });
+    return response.data;
+  }
+
+  // 4. Ambil Sesi Patroli Aktif
+  Future<Map<String, dynamic>> getActivePatrolSession() async {
+    final response = await _dio.get('/patrol/session/active');
+    return response.data;
+  }
+
+  // 5. Scan QR Checkpoint (Watermark + Geofencing <=10m)
   Future<Map<String, dynamic>> scanCheckpoint({
     required int patrolSessionId,
     required String qrToken,
@@ -790,7 +1005,21 @@ class PatroliApiService {
     return response.data;
   }
 
-  // 3. Tambah Checkpoint Baru
+  // 6. Selesaikan Sesi Ronde Patroli
+  Future<Map<String, dynamic>> finishPatrolSession({
+    required int patrolSessionId,
+    String? notes,
+    bool force = false,
+  }) async {
+    final response = await _dio.post('/patrol/session/finish', data: {
+      'patrol_session_id': patrolSessionId,
+      'notes': notes,
+      'force': force,
+    });
+    return response.data;
+  }
+
+  // 7. Tambah Checkpoint Baru
   Future<Map<String, dynamic>> addCheckpoint({
     required int siteId,
     required String name,
@@ -812,7 +1041,7 @@ class PatroliApiService {
     return response.data;
   }
 
-  // 4. Update Checkpoint
+  // 8. Update Checkpoint
   Future<Map<String, dynamic>> updateCheckpoint({
     required int checkpointId,
     required String name,

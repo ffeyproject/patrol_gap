@@ -98,6 +98,9 @@ class _PatroliScreenState extends State<PatroliScreen> {
             totalCheckpoints: totalCp,
             scannedCount: scannedCp,
             remainingCount: (totalCp - scannedCp) < 0 ? 0 : (totalCp - scannedCp),
+            progressPercentage: activeSession.progressPercentage,
+            isAllScanned: activeSession.isAllScanned,
+            nextCheckpoint: activeSession.nextCheckpoint,
             checkpoints: checkpoints,
           );
         }
@@ -219,9 +222,10 @@ class _PatroliScreenState extends State<PatroliScreen> {
       return;
     }
 
-    int selectedRound = 1;
+    int nextRound = (_schedule?.completedRoundsCount ?? 0) + 1;
+    int selectedRound = nextRound > 5 ? 1 : nextRound;
     final notesCtrl =
-        TextEditingController(text: 'Memulai patroli round area site');
+        TextEditingController(text: 'Memulai patroli round $selectedRound area site');
 
     final bool? startConfirmed = await showDialog<bool>(
       context: context,
@@ -287,7 +291,7 @@ class _PatroliScreenState extends State<PatroliScreen> {
                 controller: notesCtrl,
                 maxLines: 2,
                 decoration: InputDecoration(
-                  hintText: 'Misal: Patroli round 1 area basement & lobby',
+                  hintText: 'Misal: Patroli round area basement & lobby',
                   filled: true,
                   fillColor: const Color(0xFFF8FAFC),
                   contentPadding:
@@ -331,13 +335,17 @@ class _PatroliScreenState extends State<PatroliScreen> {
     setState(() => _loading = true);
 
     try {
+      final Map<String, dynamic> body = {
+        'round_number': selectedRound,
+        'notes': notesCtrl.text.trim(),
+      };
+      if (_schedule?.id != null && _schedule!.id > 0) {
+        body['patrol_schedule_id'] = _schedule!.id;
+      }
+
       final res = await ApiService.instance.post(
         '/patrol/session/start',
-        {
-          'patrol_schedule_id': _schedule?.id ?? 1,
-          'round_number': selectedRound,
-          'notes': notesCtrl.text.trim(),
-        },
+        body,
       );
 
       if (!mounted) return;
@@ -477,17 +485,31 @@ class _PatroliScreenState extends State<PatroliScreen> {
           SnackBar(
             backgroundColor: const Color(0xFF16A34A),
             content: Text(
-                res['message']?.toString() ?? 'Ronde patroli berhasil selesai!'),
+                res['message']?.toString() ?? 'Ronde patroli berhasil diselesaikan!'),
           ),
         );
         await _loadData();
       } else {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFDC2626),
-            content: Text(res['message']?.toString() ??
-                'Gagal menyelesaikan patroli.'),
+        final msg = res['message']?.toString() ?? 'Gagal menyelesaikan patroli.';
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 24),
+                SizedBox(width: 8),
+                Text('Ronde Belum Lengkap', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(msg, style: const TextStyle(fontSize: 13, height: 1.4)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Mengerti', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
         );
       }
@@ -526,9 +548,20 @@ class _PatroliScreenState extends State<PatroliScreen> {
     }
   }
 
-  Future<void> _scanQr() async {
+  Future<void> _scanQr([CheckpointModel? targetCheckpoint]) async {
     if (!_isCheckedIn) {
       await _showCheckInRequiredDialog();
+      return;
+    }
+
+    if (_activeSession == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFD97706),
+          content: Text('Silakan tekan tombol "Mulai Ronde" terlebih dahulu sebelum scan QR.'),
+        ),
+      );
+      await _startRoundDialog();
       return;
     }
 
@@ -537,7 +570,7 @@ class _PatroliScreenState extends State<PatroliScreen> {
       MaterialPageRoute(
         builder: (_) => QrScanScreen(
           user: widget.user,
-          activeSessionId: _activeSession?.sessionId,
+          activeSessionId: _activeSession!.sessionId,
         ),
       ),
     );
@@ -605,7 +638,7 @@ class _PatroliScreenState extends State<PatroliScreen> {
       floatingActionButton: _loading
           ? null
           : FloatingActionButton.extended(
-              onPressed: _scanQr,
+              onPressed: () => _scanQr(),
               backgroundColor: _isCheckedIn
                   ? const Color(0xFF059669)
                   : const Color(0xFF64748B),
@@ -618,7 +651,9 @@ class _PatroliScreenState extends State<PatroliScreen> {
               ),
               label: Text(
                 _isCheckedIn
-                    ? 'Pindai QR Checkpoint'
+                    ? (_activeSession?.nextCheckpoint != null
+                        ? 'Scan Titik #${_activeSession!.nextCheckpoint!.orderIndex}'
+                        : 'Pindai QR Checkpoint')
                     : 'Wajib Check-In Shift',
                 style: const TextStyle(
                     fontWeight: FontWeight.w900, letterSpacing: 0.3),
@@ -675,9 +710,15 @@ class _PatroliScreenState extends State<PatroliScreen> {
                   _buildActiveSessionCard(
                       done: done, total: total, progress: progress),
 
+                  // 2.1 Next Checkpoint Guidance Banner (Sekuensial)
+                  if (_activeSession != null && _activeSession!.nextCheckpoint != null) ...[
+                    const SizedBox(height: 14),
+                    _buildNextCheckpointGuideCard(_activeSession!.nextCheckpoint!),
+                  ],
+
                   const SizedBox(height: 22),
 
-                  // 3. Section Title with Start Round Action
+                  // 3. Section Title with Start / Finish Round Action
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -721,6 +762,24 @@ class _PatroliScreenState extends State<PatroliScreen> {
                             style: TextStyle(
                                 fontSize: 12, fontWeight: FontWeight.w900),
                           ),
+                        )
+                      else if (_activeSession!.isAllScanned)
+                        ElevatedButton.icon(
+                          onPressed: _finishRoundDialog,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF16A34A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 9),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.check_circle_rounded, size: 18),
+                          label: const Text(
+                            'Selesai Ronde',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w900),
+                          ),
                         ),
                     ],
                   ),
@@ -734,14 +793,112 @@ class _PatroliScreenState extends State<PatroliScreen> {
                     ..._checkpoints.asMap().entries.map((entry) {
                       final index = entry.key;
                       final cp = entry.value;
+                      final bool isNextTarget = _activeSession?.nextCheckpoint != null &&
+                          (cp.id == _activeSession!.nextCheckpoint!.id ||
+                              cp.orderIndex == _activeSession!.nextCheckpoint!.orderIndex ||
+                              (index + 1) == _activeSession!.nextCheckpoint!.orderIndex);
+
                       return _CheckpointTile(
                         number: index + 1,
                         checkpoint: cp,
-                        onScanTap: _scanQr,
+                        hasActiveSession: _activeSession != null,
+                        isNextTarget: isNextTarget,
+                        onScanTap: () => _scanQr(cp),
                       );
                     }),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildNextCheckpointGuideCard(NextCheckpointInfo nextCp) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF93C5FD), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Icon(Icons.near_me_rounded, color: Colors.white, size: 22),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'TITIK #${nextCp.orderIndex}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Wajib Discan Berikutnya',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E40AF),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  nextCp.name,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => _scanQr(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('Scan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+          ),
+        ],
       ),
     );
   }
@@ -846,15 +1003,16 @@ class _PatroliScreenState extends State<PatroliScreen> {
 
   Widget _buildShiftScheduleCard() {
     final schedule = _schedule;
-    final siteName = schedule?.site?.name ?? 'Site Gedung Menara Utama';
-    final shiftName = schedule?.shiftName ?? 'Shift Pagi (07:00 - 15:00)';
+    final siteName = schedule?.site?.name ?? 'Site PT. Gajah Angkasa Perkasa';
+    final shiftName = schedule?.shiftName ?? 'Shift Rutin Patroli';
+    final isCurrent = schedule?.isCurrentShift == true;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: isCurrent ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.03),
@@ -869,11 +1027,11 @@ class _PatroliScreenState extends State<PatroliScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFDBEAFE),
+              color: isCurrent ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(13),
             ),
-            child: const Icon(Icons.domain_rounded,
-                color: Color(0xFF1D4ED8), size: 22),
+            child: Icon(Icons.domain_rounded,
+                color: isCurrent ? const Color(0xFF1D4ED8) : const Color(0xFF64748B), size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -905,13 +1063,13 @@ class _PatroliScreenState extends State<PatroliScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFDCFCE7),
+              color: isCurrent ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Text(
-              'JADWAL AKTIF',
+            child: Text(
+              isCurrent ? 'SHIFT AKTIF' : 'TERJADWAL',
               style: TextStyle(
-                color: Color(0xFF15803D),
+                color: isCurrent ? const Color(0xFF15803D) : const Color(0xFF64748B),
                 fontSize: 9.5,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0.4,
@@ -1133,11 +1291,15 @@ class _PatroliScreenState extends State<PatroliScreen> {
 class _CheckpointTile extends StatefulWidget {
   final int number;
   final CheckpointModel checkpoint;
+  final bool hasActiveSession;
+  final bool isNextTarget;
   final VoidCallback onScanTap;
 
   const _CheckpointTile({
     required this.number,
     required this.checkpoint,
+    this.hasActiveSession = false,
+    this.isNextTarget = false,
     required this.onScanTap,
   });
 
@@ -1152,6 +1314,17 @@ class _CheckpointTileState extends State<_CheckpointTile> {
   Widget build(BuildContext context) {
     final cp = widget.checkpoint;
     final isScanned = cp.isScanned;
+    final isNext = widget.isNextTarget;
+
+    Color borderColor = const Color(0xFFE2E8F0);
+    double borderWidth = 1.0;
+    if (isScanned) {
+      borderColor = const Color(0xFF86EFAC);
+      borderWidth = 1.4;
+    } else if (isNext) {
+      borderColor = const Color(0xFF3B82F6);
+      borderWidth = 1.8;
+    }
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -1165,17 +1338,17 @@ class _CheckpointTileState extends State<_CheckpointTile> {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isNext ? const Color(0xFFF8FAFC) : Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: isScanned
-                  ? const Color(0xFF86EFAC)
-                  : const Color(0xFFE2E8F0),
-              width: isScanned ? 1.4 : 1.0,
+              color: borderColor,
+              width: borderWidth,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                color: isNext
+                    ? const Color(0xFF2563EB).withValues(alpha: 0.08)
+                    : const Color(0xFF0F172A).withValues(alpha: 0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1190,21 +1363,24 @@ class _CheckpointTileState extends State<_CheckpointTile> {
                 decoration: BoxDecoration(
                   color: isScanned
                       ? const Color(0xFFDCFCE7)
-                      : const Color(0xFFF1F5F9),
+                      : (isNext ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9)),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: isScanned
                       ? const Icon(Icons.check_rounded,
                           color: Color(0xFF16A34A), size: 20)
-                      : Text(
-                          '${widget.number}',
-                          style: const TextStyle(
-                            color: Color(0xFF475569),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                      : (isNext
+                          ? const Icon(Icons.near_me_rounded,
+                              color: Color(0xFF2563EB), size: 20)
+                          : Text(
+                              '${widget.number}',
+                              style: const TextStyle(
+                                color: Color(0xFF475569),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1218,10 +1394,10 @@ class _CheckpointTileState extends State<_CheckpointTile> {
                       cp.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
+                        color: isNext ? const Color(0xFF1E40AF) : const Color(0xFF0F172A),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -1278,6 +1454,42 @@ class _CheckpointTileState extends State<_CheckpointTile> {
                       color: Color(0xFF15803D),
                       fontSize: 9.5,
                       fontWeight: FontWeight.w900,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                )
+              else if (isNext)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'TARGET BERIKUTNYA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                )
+              else if (widget.hasActiveSession)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'MENUNGGU GILIRAN',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.3,
                     ),
                   ),

@@ -264,6 +264,29 @@ class SiteModel {
   String get siteName => name;
 }
 
+class NextCheckpointInfo {
+  final int id;
+  final String name;
+  final String code;
+  final int orderIndex;
+
+  NextCheckpointInfo({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.orderIndex,
+  });
+
+  factory NextCheckpointInfo.fromJson(Map<String, dynamic> json) {
+    return NextCheckpointInfo(
+      id: int.tryParse(json['id']?.toString() ?? '0') ?? 0,
+      name: json['name']?.toString() ?? 'Checkpoint',
+      code: json['code']?.toString() ?? '',
+      orderIndex: int.tryParse(json['order_index']?.toString() ?? '1') ?? 1,
+    );
+  }
+}
+
 class PatrolSchedule {
   final int id;
   final int siteId;
@@ -271,6 +294,12 @@ class PatrolSchedule {
   final String startTime;
   final String endTime;
   final int minPatrolRounds;
+  final bool isCurrentShift;
+  final bool hasActiveSession;
+  final int? activeSessionId;
+  final int? activeRoundNumber;
+  final int completedRoundsCount;
+  final int totalCheckpoints;
   final SiteModel? site;
 
   PatrolSchedule({
@@ -280,6 +309,12 @@ class PatrolSchedule {
     required this.startTime,
     required this.endTime,
     required this.minPatrolRounds,
+    this.isCurrentShift = false,
+    this.hasActiveSession = false,
+    this.activeSessionId,
+    this.activeRoundNumber,
+    this.completedRoundsCount = 0,
+    this.totalCheckpoints = 0,
     this.site,
   });
 
@@ -291,6 +326,12 @@ class PatrolSchedule {
       startTime: json['start_time']?.toString() ?? '07:00:00',
       endTime: json['end_time']?.toString() ?? '15:00:00',
       minPatrolRounds: int.tryParse(json['min_patrol_rounds']?.toString() ?? '1') ?? 1,
+      isCurrentShift: json['is_current_shift'] == true || json['is_current_shift'] == 1,
+      hasActiveSession: json['has_active_session'] == true || json['has_active_session'] == 1,
+      activeSessionId: int.tryParse(json['active_session_id']?.toString() ?? ''),
+      activeRoundNumber: int.tryParse(json['active_round_number']?.toString() ?? ''),
+      completedRoundsCount: int.tryParse(json['completed_rounds_count']?.toString() ?? '0') ?? 0,
+      totalCheckpoints: int.tryParse(json['total_checkpoints']?.toString() ?? '0') ?? 0,
       site: json['site'] != null ? SiteModel.fromJson(Map<String, dynamic>.from(json['site'] as Map)) : null,
     );
   }
@@ -307,6 +348,9 @@ class PatrolSession {
   final int totalCheckpoints;
   final int scannedCount;
   final int remainingCount;
+  final double progressPercentage;
+  final bool isAllScanned;
+  final NextCheckpointInfo? nextCheckpoint;
   final List<CheckpointModel> checkpoints;
 
   PatrolSession({
@@ -320,6 +364,9 @@ class PatrolSession {
     required this.totalCheckpoints,
     required this.scannedCount,
     required this.remainingCount,
+    this.progressPercentage = 0.0,
+    this.isAllScanned = false,
+    this.nextCheckpoint,
     this.checkpoints = const [],
   });
 
@@ -331,8 +378,11 @@ class PatrolSession {
           .toList();
     }
 
+    final progressMap = json['progress'] is Map ? (json['progress'] as Map<String, dynamic>) : null;
+
     int total = int.tryParse(
-          json['total_checkpoints']?.toString() ??
+          progressMap?['total_checkpoints']?.toString() ??
+              json['total_checkpoints']?.toString() ??
               json['totalCheckpoints']?.toString() ??
               json['checkpoints_count']?.toString() ??
               json['total_points']?.toString() ??
@@ -345,7 +395,8 @@ class PatrolSession {
     }
 
     int scanned = int.tryParse(
-          json['scanned_count']?.toString() ??
+          progressMap?['scanned_count']?.toString() ??
+              json['scanned_count']?.toString() ??
               json['scannedCount']?.toString() ??
               json['scanned_checkpoints']?.toString() ??
               json['points_scanned']?.toString() ??
@@ -357,9 +408,27 @@ class PatrolSession {
       scanned = cpList.where((c) => c.isScanned).length;
     }
 
+    double percentage = double.tryParse(progressMap?['percentage']?.toString() ?? '') ??
+        (total > 0 ? (scanned / total) * 100 : 0.0);
+
+    bool allScanned = progressMap?['is_all_scanned'] == true || (total > 0 && scanned >= total);
+
+    NextCheckpointInfo? nextCp;
+    if (progressMap?['next_checkpoint'] is Map) {
+      nextCp = NextCheckpointInfo.fromJson(Map<String, dynamic>.from(progressMap!['next_checkpoint'] as Map));
+    } else if (json['next_checkpoint'] is Map) {
+      nextCp = NextCheckpointInfo.fromJson(Map<String, dynamic>.from(json['next_checkpoint'] as Map));
+    }
+
     final site = json['site_name']?.toString() ??
         json['siteName']?.toString() ??
         json['site']?['name']?.toString();
+
+    final scheduleObj = json['schedule'] is Map ? (json['schedule'] as Map<String, dynamic>) : null;
+    final schedId = int.tryParse(scheduleObj?['id']?.toString() ??
+        json['patrol_schedule_id']?.toString() ??
+        json['schedule_id']?.toString() ??
+        '');
 
     return PatrolSession(
       sessionId: int.tryParse(json['session_id']?.toString() ??
@@ -367,9 +436,7 @@ class PatrolSession {
               json['id']?.toString() ??
               '0') ??
           0,
-      scheduleId: int.tryParse(json['patrol_schedule_id']?.toString() ??
-          json['schedule_id']?.toString() ??
-          ''),
+      scheduleId: schedId,
       roundNumber: int.tryParse(json['round_number']?.toString() ??
               json['roundNumber']?.toString() ??
               json['round']?.toString() ??
@@ -383,6 +450,9 @@ class PatrolSession {
       totalCheckpoints: total,
       scannedCount: scanned,
       remainingCount: (total - scanned) < 0 ? 0 : (total - scanned),
+      progressPercentage: percentage,
+      isAllScanned: allScanned,
+      nextCheckpoint: nextCp,
       checkpoints: cpList,
     );
   }
