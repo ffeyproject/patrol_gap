@@ -1,8 +1,8 @@
 {
-  "version": "1.0.3",
-  "version_code": 4,
-  "apk_url": "https://apk.produksionline.xyz/files/Patroli_GAP_v1.0.3.apk",
-  "changelog": "• Wajib presensi check-in shift sebelum scan checkpoint & patroli\n• Perbaikan kalkulasi persentase dan progress counter checkpoint\n• Peningkatan auto-refresh dashboard beranda dan performa aplikasi",
+  "version": "1.0.5",
+  "version_code": 6,
+  "apk_url": "https://apk.produksionline.xyz/files/Patroli_GAP_v1.0.5.apk",
+  "changelog": "• Integrasi API 1.4 Live Real-Time GPS Tracking (ping lokasi berkala satpam)\n• Penambahan indikator heading kompas arah dan kecepatan gerak di peta radar\n• Sinkronisasi otomatis posisi petugas aktif ke web dashboard\n• Peningkatan efisiensi baterai dan akurasi pelacakan posisi",
   "force_update": false,
   "file_size": "102 MB"
 }

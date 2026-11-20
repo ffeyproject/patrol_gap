@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../theme/app_theme.dart';
 
@@ -286,6 +287,21 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     super.dispose();
   }
 
+  Future<void> _openBrowserDownload() async {
+    try {
+      final url = widget.updateInfo.apkUrl.trim();
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = 'Gagal membuka browser: $e');
+    }
+  }
+
   Future<void> _startUpdate() async {
     if (_isDownloading) return;
 
@@ -297,7 +313,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     });
 
     try {
-      // 1. Periksa dan minta izin REQUEST_INSTALL_PACKAGES agar Android tidak membatalkan update
+      // 1. Periksa izin REQUEST_INSTALL_PACKAGES
       final status = await Permission.requestInstallPackages.status;
       if (!status.isGranted) {
         final req = await Permission.requestInstallPackages.request();
@@ -306,9 +322,48 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           setState(() {
             _isDownloading = false;
             _errorMessage =
-                'Izin instalasi aplikasi diperlukan. Silakan aktifkan opsi "Izinkan dari sumber ini" pada pengaturan aplikasi.';
+                'Izin instalasi dari sumber tidak dikenal diperlukan. Silakan aktifkan opsi "Izinkan dari sumber ini" di Pengaturan, atau gunakan tombol "Unduh via Browser".';
           });
-          await openAppSettings();
+
+          final bool? openSettings = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.security_update_good_rounded, color: Color(0xFF2563EB), size: 24),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Izin Instalasi Diperlukan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                ],
+              ),
+              content: const Text(
+                'Agar aplikasi dapat menginstal pembaruan secara otomatis, aktifkan opsi "Izinkan dari sumber ini" pada pengaturan aplikasi Patroli GAP di layar berikutnya.\n\nAtau Anda dapat mengunduh langsung via Browser Chrome.',
+                style: TextStyle(fontSize: 13, height: 1.45, color: Color(0xFF475569)),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx, false);
+                    _openBrowserDownload();
+                  },
+                  child: const Text('Unduh via Browser', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Buka Pengaturan'),
+                ),
+              ],
+            ),
+          );
+
+          if (openSettings == true) {
+            await openAppSettings();
+          }
           return;
         }
       }
@@ -342,7 +397,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             case OtaStatus.INSTALLING:
               setState(() {
                 _progress = 100;
-                _statusText = 'Silakan tekan "Update" pada layar instalasi...';
+                _statusText = 'Membuka installer paket Android...';
               });
               break;
             case OtaStatus.ALREADY_RUNNING_ERROR:
@@ -354,14 +409,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
               setState(() {
                 _isDownloading = false;
-                _errorMessage = 'Izin instalasi dari sumber tidak dikenal belum diaktifkan. Silakan aktifkan di Pengaturan Android.';
+                _errorMessage = 'Izin instalasi belum aktif. Silakan aktifkan di Pengaturan atau unduh via Browser.';
               });
               break;
             case OtaStatus.INTERNAL_ERROR:
             default:
               setState(() {
                 _isDownloading = false;
-                _errorMessage = 'Gagal mengunduh: ${event.value ?? 'Terjadi kesalahan internal'}';
+                _errorMessage = 'Gagal menginstal otomatis: ${event.value ?? 'Terjadi kesalahan'}. Silakan gunakan unduhan browser.';
               });
               break;
           }
@@ -506,24 +561,46 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               if (_errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFFECACA)),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFFDC2626),
-                            fontWeight: FontWeight.w600,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: Color(0xFFDC2626),
+                                fontWeight: FontWeight.w600,
+                                height: 1.35,
+                              ),
+                            ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _openBrowserDownload,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626),
+                            side: const BorderSide(color: Color(0xFFDC2626)),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                          label: const Text('Unduh Manual via Browser (Chrome)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -547,12 +624,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _statusText,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF64748B),
+                    Expanded(
+                      child: Text(
+                        _statusText,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                        ),
                       ),
                     ),
                     Text(
@@ -571,57 +650,70 @@ class _UpdateDialogState extends State<_UpdateDialog> {
 
               // Action Buttons
               if (!_isDownloading) ...[
-                Row(
+                Column(
                   children: [
-                    if (!info.forceUpdate) ...[
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Nanti Saja',
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      flex: info.forceUpdate ? 1 : 1,
-                      child: ElevatedButton(
-                        onPressed: _startUpdate,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.download_rounded, size: 18),
-                            SizedBox(width: 6),
-                            Text(
-                              'Update Sekarang',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                    Row(
+                      children: [
+                        if (!info.forceUpdate) ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                'Nanti Saja',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        Expanded(
+                          flex: 1,
+                          child: ElevatedButton(
+                            onPressed: _startUpdate,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.download_rounded, size: 18),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Update Otomatis',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _openBrowserDownload,
+                      icon: const Icon(Icons.open_in_browser_rounded, size: 16, color: Color(0xFF2563EB)),
+                      label: const Text(
+                        'Unduh File APK via Browser (Chrome)',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFF2563EB), fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],

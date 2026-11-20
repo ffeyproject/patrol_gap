@@ -98,6 +98,68 @@ Dokumentasi lengkap REST API untuk integrasi aplikasi mobile Satpam & Danru berb
 
 ---
 
+## 📍 1.4 Live Real-Time GPS Location Tracking (Ping Lokasi Satpam)
+
+### 1.4.1 Kirim Koordinat GPS Live Satpam (Background / Foreground Ping)
+
+- **Endpoint**: `POST /live/location`
+- **Auth**: Bearer Token
+- **Deskripsi**: Dipanggil oleh aplikasi mobile satpam secara berkala (misalnya setiap 5–15 detik saat patroli aktif) untuk memperbarui posisi marker satpam di halaman web `/peta-live` secara real-time dan bergerak mulus.
+- **Request Body (JSON)**:
+    ```json
+    {
+        "latitude": -6.9145228,
+        "longitude": 107.5675541,
+        "heading": 120.5,
+        "speed": 1.2,
+        "accuracy": 4.5
+    }
+    ```
+- **Response Success (`200 OK`)**:
+    ```json
+    {
+        "success": true,
+        "message": "Koordinat GPS live berhasil diperbarui.",
+        "data": {
+            "user_id": 22,
+            "latitude": -6.9145228,
+            "longitude": 107.5675541,
+            "updated_at": "15:35:10 WIB"
+        }
+    }
+    ```
+
+### 1.4.2 Ambil Data Seluruh Satpam Aktif di Peta Live
+
+- **Endpoint**: `GET /live/guards`
+- **Auth**: Bearer Token
+- **Response Success (`200 OK`)**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "active_guards": [
+                {
+                    "id": 22,
+                    "name": "Toni Sudrajat",
+                    "role": "SATPAM",
+                    "badge_number": "58704",
+                    "status": "Patroli Aktif (Round 1)",
+                    "latitude": -6.9145228,
+                    "longitude": 107.5675541,
+                    "last_checkpoint_name": "Twisting Bawah",
+                    "last_scanned_at": "15:29:18 WIB",
+                    "is_in_patrol": true
+                }
+            ],
+            "total_guards_present": 1,
+            "total_in_patrol": 1
+        }
+    }
+    ```
+
+---
+
 ## 🕒 2. Attendance (Presensi Masuk & Keluar Shift)
 
 ### 2.1 Cek Status Presensi Hari Ini

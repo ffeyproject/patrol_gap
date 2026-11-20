@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/models.dart';
+import '../services/location_service.dart';
 import '../services/update_service.dart';
 import 'beranda_screen.dart';
 import 'patroli_screen.dart';
@@ -38,12 +39,21 @@ class _HomeShellState extends State<HomeShell> {
       ProfilScreen(user: widget.user),
     ];
 
+    // Mulai periodic GPS location ping (1.4 Live Tracking)
+    LocationService.instance.startLiveTracking(interval: const Duration(seconds: 10));
+
     // Otomatis periksa ketersediaan pembaruan dari server apk.produksionline.xyz
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         UpdateService.instance.checkForUpdate(context, silent: true);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    LocationService.instance.stopLiveTracking();
+    super.dispose();
   }
 
   void _onTabSelected(int index) {

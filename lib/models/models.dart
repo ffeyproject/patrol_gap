@@ -630,6 +630,9 @@ class LiveGuardModel {
   final String status;
   final double latitude;
   final double longitude;
+  final double? heading;
+  final double? speed;
+  final double? accuracy;
   final String? lastCheckpointName;
   final String? lastScannedAt;
   final double? lastDistanceMeters;
@@ -645,6 +648,9 @@ class LiveGuardModel {
     required this.status,
     required this.latitude,
     required this.longitude,
+    this.heading,
+    this.speed,
+    this.accuracy,
     this.lastCheckpointName,
     this.lastScannedAt,
     this.lastDistanceMeters,
@@ -662,6 +668,9 @@ class LiveGuardModel {
       status: json['status']?.toString() ?? 'Bertugas',
       latitude: double.tryParse(json['latitude']?.toString() ?? '0') ?? 0.0,
       longitude: double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
+      heading: double.tryParse(json['heading']?.toString() ?? ''),
+      speed: double.tryParse(json['speed']?.toString() ?? ''),
+      accuracy: double.tryParse(json['accuracy']?.toString() ?? ''),
       lastCheckpointName: json['last_checkpoint_name']?.toString(),
       lastScannedAt: json['last_scanned_at']?.toString(),
       lastDistanceMeters: double.tryParse(json['last_distance_meters']?.toString() ?? ''),

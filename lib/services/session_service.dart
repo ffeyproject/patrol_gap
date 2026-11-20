@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import 'api_service.dart';
+import 'location_service.dart';
 
 /// Service manajemen sesi pengguna dengan penyimpanan token terenkripsi
 /// pada level hardware (Android Keystore & iOS Keychain)
@@ -153,5 +154,6 @@ class SessionService {
     _currentUser = null;
     _token = null;
     ApiService.instance.clearAuthToken();
+    LocationService.instance.stopLiveTracking();
   }
 }

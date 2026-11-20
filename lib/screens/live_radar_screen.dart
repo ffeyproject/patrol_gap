@@ -301,11 +301,20 @@ class _LiveRadarScreenState extends State<LiveRadarScreen> {
                           ),
                         ],
                       ),
-                      child: Icon(
-                        isPatrol ? Icons.radar_rounded : Icons.shield_rounded,
-                        color: Colors.white,
-                        size: 15,
-                      ),
+                      child: (guard.heading != null && guard.heading! > 0)
+                          ? Transform.rotate(
+                              angle: (guard.heading! * 3.141592653589793 / 180),
+                              child: const Icon(
+                                Icons.navigation_rounded,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            )
+                          : Icon(
+                              isPatrol ? Icons.radar_rounded : Icons.shield_rounded,
+                              color: Colors.white,
+                              size: 15,
+                            ),
                     ),
                   ],
                 ),
@@ -652,6 +661,39 @@ class _LiveRadarScreenState extends State<LiveRadarScreen> {
                                     color: Color(0xFF64748B),
                                   ),
                                 ),
+                              ],
+                            ),
+                          ],
+                          if (guard.speed != null || guard.accuracy != null) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                if (guard.speed != null) ...[
+                                  const Icon(Icons.speed_rounded,
+                                      size: 13, color: Color(0xFF059669)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '${(guard.speed! * 3.6).toStringAsFixed(1)} km/h',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF059669),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                if (guard.accuracy != null) ...[
+                                  const Icon(Icons.gps_fixed_rounded,
+                                      size: 12, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Akurasi: ±${guard.accuracy!.toStringAsFixed(0)}m',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ],
